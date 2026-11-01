@@ -1,0 +1,2087 @@
+<!DOCTYPE html>
+<html lang="sr" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Pametni Termostat — Kontrola Grejanja v2.3 (OTA)</title>
+<style>
+  :root {
+    --bg-main: #0f172a;
+    --bg-card: #1e293b;
+    --bg-card-alt: #263349;
+    --bg-input: #0f172a;
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --border-color: rgba(148, 163, 184, 0.16);
+    --accent: #f97316;
+    --accent-glow: rgba(249, 115, 22, 0.25);
+    --primary: #3b82f6;
+    --primary-glow: rgba(59, 130, 246, 0.25);
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --shadow: 0 12px 32px -4px rgba(0, 0, 0, 0.4);
+    --radius-lg: 20px;
+    --radius-md: 14px;
+    --radius-sm: 10px;
+  }
+
+  [data-theme="light"] {
+    --bg-main: #f1f5f9;
+    --bg-card: #ffffff;
+    --bg-card-alt: #f8fafc;
+    --bg-input: #f1f5f9;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #64748b;
+    --border-color: rgba(15, 23, 42, 0.1);
+    --accent: #ea580c;
+    --accent-glow: rgba(234, 88, 12, 0.18);
+    --primary: #2563eb;
+    --primary-glow: rgba(37, 99, 235, 0.18);
+    --success: #059669;
+    --warning: #d97706;
+    --danger: #dc2626;
+    --shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.08);
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Helvetica, Arial, sans-serif;
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+    min-height: 100vh;
+    padding: 16px;
+    transition: background-color 0.25s ease, color 0.25s ease;
+    line-height: 1.5;
+  }
+
+  .container {
+    max-width: 820px;
+    margin: 0 auto;
+    padding-bottom: 40px;
+  }
+
+  /* Header */
+  .app-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 18px;
+    padding: 16px 20px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+  }
+
+  .brand-wrap {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .brand-icon {
+    width: 46px;
+    height: 46px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #f97316, #ef4444);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    box-shadow: 0 6px 16px rgba(249, 115, 22, 0.35);
+    flex-shrink: 0;
+  }
+
+  h1 {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    color: var(--text-primary);
+    margin: 0;
+  }
+
+  .header-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 2px;
+  }
+
+  .current-time {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+
+  .conn-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+  }
+
+  .conn-badge.demo {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--warning);
+    border-color: rgba(245, 158, 11, 0.3);
+  }
+
+  .conn-badge.stale {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--danger);
+    border-color: rgba(239, 68, 68, 0.3);
+  }
+
+  .conn-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .icon-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card-alt);
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    transition: all 0.2s ease;
+  }
+
+  .icon-btn:hover {
+    border-color: var(--primary);
+    transform: translateY(-1px);
+  }
+
+  /* Navigation Tabs */
+  .tab-nav {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    background: var(--bg-card);
+    padding: 6px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    margin-bottom: 18px;
+    box-shadow: var(--shadow);
+  }
+
+  .tab-btn {
+    padding: 12px 10px;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    background: transparent;
+    color: var(--text-secondary);
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .tab-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-card-alt);
+  }
+
+  .tab-btn.active {
+    background: var(--primary);
+    color: #ffffff;
+    box-shadow: 0 4px 14px var(--primary-glow);
+  }
+
+  /* Battery Warning Banner */
+  #batteryWarning {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(239, 68, 68, 0.2));
+    border: 1px solid rgba(245, 158, 11, 0.5);
+    color: var(--text-primary);
+    padding: 14px 18px;
+    border-radius: var(--radius-md);
+    margin-bottom: 18px;
+    animation: pulseWarn 2.2s infinite;
+  }
+
+  @keyframes pulseWarn {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.82; }
+  }
+
+  /* Status KPI Grid (uvek vidljiv) */
+  .status-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .status-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    padding: 16px 14px;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .status-item::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background: var(--primary);
+    opacity: 0.7;
+  }
+
+  .status-item.heating-active::before {
+    background: var(--accent);
+    opacity: 1;
+  }
+
+  .status-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+  }
+
+  .status-value {
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--text-primary);
+    letter-spacing: -0.5px;
+  }
+
+  .status-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* Tab Content */
+  .tab-content {
+    display: none;
+    animation: fadeIn 0.22s ease-out;
+  }
+
+  .tab-content.active {
+    display: block;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Hero Thermostat Card in Control Tab */
+  .thermostat-hero {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 18px;
+    margin-bottom: 18px;
+  }
+
+  .dial-card, .controls-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    box-shadow: var(--shadow);
+  }
+
+  .dial-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    position: relative;
+  }
+
+  .thermostat-ring {
+    width: 210px;
+    height: 210px;
+    border-radius: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    background: radial-gradient(circle at center, var(--bg-card-alt) 62%, transparent 63%),
+                conic-gradient(from 220deg, var(--primary) 0deg, var(--accent) 180deg, rgba(148,163,184,0.15) 280deg, transparent 280deg);
+    box-shadow: inset 0 0 30px rgba(0,0,0,0.25), 0 8px 25px rgba(0,0,0,0.2);
+    margin-bottom: 14px;
+    transition: box-shadow 0.3s ease;
+  }
+
+  .thermostat-ring.heating {
+    box-shadow: inset 0 0 30px rgba(249, 115, 22, 0.2), 0 0 35px var(--accent-glow);
+  }
+
+  .ring-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-secondary);
+    font-weight: 700;
+  }
+
+  .ring-temp {
+    font-size: 46px;
+    font-weight: 800;
+    letter-spacing: -1.5px;
+    line-height: 1.1;
+    margin: 4px 0;
+  }
+
+  .ring-target {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    background: rgba(249, 115, 22, 0.14);
+    padding: 3px 10px;
+    border-radius: 999px;
+  }
+
+  .sensor-health-bar {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-color);
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .battery-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg-card-alt);
+    padding: 5px 10px;
+    border-radius: 8px;
+    font-weight: 600;
+    color: var(--success);
+  }
+
+  /* Mode Controls */
+  .section-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .button-group {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .mode-btn {
+    padding: 16px 10px;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-card-alt);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .mode-btn .mode-emoji {
+    font-size: 22px;
+  }
+
+  .mode-btn:hover {
+    transform: translateY(-2px);
+    border-color: var(--text-secondary);
+  }
+
+  .mode-btn.active-auto {
+    border-color: var(--success);
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success);
+    box-shadow: 0 4px 16px rgba(16, 185, 129, 0.2);
+  }
+
+  .mode-btn.active-on {
+    border-color: var(--accent);
+    background: rgba(249, 115, 22, 0.15);
+    color: var(--accent);
+    box-shadow: 0 4px 16px var(--accent-glow);
+  }
+
+  .mode-btn.active-off {
+    border-color: var(--primary);
+    background: rgba(59, 130, 246, 0.15);
+    color: var(--primary);
+    box-shadow: 0 4px 16px var(--primary-glow);
+  }
+
+  /* Manual Temp Slider Control */
+  .control-group {
+    background: var(--bg-card-alt);
+    padding: 18px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+  }
+
+  .slider-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .slider-header label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .temp-value-display {
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--accent);
+  }
+
+  .temp-slider-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .step-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .step-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  input[type="range"] {
+    flex: 1;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--bg-input);
+    outline: none;
+    -webkit-appearance: none;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: 3px solid #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  }
+
+  /* Active Schedule Timeline Preview on Control Tab */
+  .timeline-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    box-shadow: var(--shadow);
+  }
+
+  .timeline-bar {
+    height: 26px;
+    background: rgba(59, 130, 246, 0.18);
+    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+    margin: 12px 0 8px;
+    border: 1px solid var(--border-color);
+  }
+
+  .timeline-slot {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, #f97316, #fb923c);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: #fff;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .timeline-now {
+    position: absolute;
+    top: -3px;
+    bottom: -3px;
+    width: 2px;
+    background: #10b981;
+    z-index: 5;
+    box-shadow: 0 0 6px #10b981;
+  }
+
+  .timeline-hours {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: monospace;
+  }
+
+  /* Settings Tab: Day Tabs & Schedule Editor */
+  .day-tabs {
+    display: flex;
+    overflow-x: auto;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding-bottom: 6px;
+    scroll-behavior: smooth;
+  }
+
+  .day-tabs::-webkit-scrollbar {
+    height: 5px;
+  }
+
+  .day-tabs::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 999px;
+  }
+
+  .day-tab {
+    padding: 10px 16px;
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    cursor: pointer;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+  }
+
+  .day-tab.active {
+    background: var(--primary);
+    color: #ffffff;
+    border-color: var(--primary);
+    box-shadow: 0 4px 12px var(--primary-glow);
+  }
+
+  .schedule-editor {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    box-shadow: var(--shadow);
+  }
+
+  .period {
+    background: var(--bg-card-alt);
+    padding: 16px;
+    border-radius: var(--radius-md);
+    margin-bottom: 14px;
+    border-left: 4px solid var(--accent);
+    transition: opacity 0.2s ease;
+  }
+
+  .period.disabled-period {
+    opacity: 0.55;
+    border-left-color: var(--text-muted);
+  }
+
+  .period-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .period h3 {
+    color: var(--text-primary);
+    font-size: 15px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .period-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .field-box {
+    background: var(--bg-card);
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
+
+  .field-box label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 600;
+  }
+
+  .time-inputs-inline {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 700;
+  }
+
+  input[type="number"] {
+    width: 56px;
+    padding: 7px 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 7px;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 700;
+    text-align: center;
+  }
+
+  input[type="number"]:focus {
+    outline: none;
+    border-color: var(--primary);
+  }
+
+  .temp-input input[type="number"] {
+    width: 68px;
+    color: var(--accent);
+  }
+
+  /* Toggle Switch */
+  .switch-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 600;
+  }
+
+  input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    accent-color: var(--accent);
+  }
+
+  .settings-grid-bottom {
+    display: grid;
+    grid-template-columns: 1fr 1.3fr;
+    gap: 14px;
+    margin-top: 16px;
+  }
+
+  .night-temp {
+    background: var(--bg-card-alt);
+    padding: 16px;
+    border-radius: var(--radius-md);
+    border-left: 4px solid var(--primary);
+  }
+
+  .night-temp.hyst-card {
+    border-left-color: var(--warning);
+  }
+
+  .night-temp h3 {
+    font-size: 15px;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+  }
+
+  .hyst-explain {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: var(--bg-card);
+    border-radius: 8px;
+  }
+
+  .action-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+  }
+
+  .save-btn {
+    flex: 1;
+    min-width: 180px;
+    padding: 14px 18px;
+    background: var(--success);
+    color: #ffffff;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .save-btn.secondary {
+    background: var(--bg-card-alt);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+  }
+
+  .save-btn.warn {
+    background: var(--warning);
+    color: #fff;
+  }
+
+  .save-btn:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.06);
+  }
+
+  /* System Tab */
+  .system-grid {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    gap: 18px;
+    margin-bottom: 18px;
+  }
+
+  .system-info, .ota-card {
+    background: var(--bg-card);
+    padding: 20px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow);
+  }
+
+  .system-info h3, .ota-card h3 {
+    color: var(--text-primary);
+    margin-bottom: 14px;
+    font-size: 16px;
+  }
+
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .info-row:last-child {
+    border-bottom: none;
+  }
+
+  .info-label {
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+
+  .info-value {
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    background: var(--bg-card-alt);
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+  }
+
+  .system-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .system-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 18px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+    color: #fff;
+  }
+
+  .system-btn:hover {
+    transform: translateY(-2px);
+  }
+
+  .btn-warning {
+    background: linear-gradient(135deg, #d97706, #ea580c);
+  }
+
+  .btn-danger {
+    background: linear-gradient(135deg, #dc2626, #be123c);
+  }
+
+  .btn-icon {
+    font-size: 24px;
+    margin-bottom: 6px;
+  }
+
+  .btn-text {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 2px;
+  }
+
+  .btn-desc {
+    font-size: 12px;
+    opacity: 0.9;
+  }
+
+  .system-note {
+    background: var(--bg-card-alt);
+    border-left: 4px solid var(--warning);
+    padding: 14px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+  }
+
+  /* OTA Upload Box */
+  .ota-upload-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+
+  .ota-file-input {
+    flex: 1;
+    min-width: 200px;
+    padding: 10px;
+    background: var(--bg-card-alt);
+    border: 1px dashed var(--border-color);
+    border-radius: 10px;
+    color: var(--text-primary);
+    font-size: 13px;
+  }
+
+  .ota-progress-wrap {
+    margin-top: 12px;
+    display: none;
+  }
+
+  .ota-progress-bar {
+    height: 10px;
+    background: var(--bg-input);
+    border-radius: 999px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+  }
+
+  .ota-progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--primary), var(--success));
+    transition: width 0.2s ease;
+  }
+
+  /* Toast Notification */
+  .toast-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .toast {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-left: 4px solid var(--success);
+    padding: 12px 16px;
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    font-size: 13px;
+    font-weight: 600;
+    animation: fadeIn 0.2s ease;
+  }
+
+  /* Confirmation Modal */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(3px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    padding: 16px;
+  }
+
+  .modal-backdrop.open {
+    display: flex;
+  }
+
+  .modal-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    max-width: 400px;
+    width: 100%;
+    padding: 22px;
+    box-shadow: var(--shadow);
+  }
+
+  .modal-title {
+    font-size: 17px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .modal-body {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 18px;
+    line-height: 1.5;
+  }
+
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .modal-btn {
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card-alt);
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  .modal-btn.confirm {
+    background: var(--danger);
+    color: #fff;
+    border-color: var(--danger);
+  }
+
+  /* Responsive */
+  @media (max-width: 720px) {
+    .status-bar {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    .thermostat-hero,
+    .settings-grid-bottom,
+    .system-grid,
+    .period-row {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <!-- Header -->
+  <header class="app-header">
+    <div class="brand-wrap">
+      <div class="brand-icon">🔥</div>
+      <div>
+        <h1>Kontrola grejanja v2.3 (OTA)</h1>
+        <div class="header-meta">
+          <span class="current-time" id="currentTime">Učitavanje vremena...</span>
+          <span class="conn-badge" id="connBadge">
+            <span class="conn-dot"></span>
+            <span id="connText">Senzor aktivan</span>
+          </span>
+        </div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="icon-btn" id="themeToggleBtn" onclick="toggleTheme()" title="Promeni temu">🌗</button>
+    </div>
+  </header>
+
+  <!-- Tab Navigation -->
+  <div class="tab-nav">
+    <button class="tab-btn active" data-tab="control" onclick="switchTab('control')">🏠 Kontrola</button>
+    <button class="tab-btn" data-tab="settings" onclick="switchTab('settings')">⚙️ Podešavanja</button>
+    <button class="tab-btn" data-tab="system" onclick="switchTab('system')">🔧 Sistem</button>
+  </div>
+
+  <!-- Battery Warning -->
+  <div id="batteryWarning" style="display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div id="batteryIcon" style="width:60px;height:30px;position:relative"></div>
+        <div id="batteryInfo">
+          <div style="font-size:16px;font-weight:800" id="batteryPercent">---%</div>
+          <div style="font-size:12px;color:var(--text-secondary)" id="batteryVoltage">--.-V</div>
+        </div>
+      </div>
+      <div id="batteryMessage" style="flex:1;min-width:200px;font-weight:600;font-size:13px">🔋 UPOZORENJE: Dopunite bateriju bežičnog senzora!</div>
+    </div>
+  </div>
+
+  <!-- Status Bar (uvek vidljiv) -->
+  <div class="status-bar">
+    <div class="status-item" id="cardIndoor">
+      <div class="status-label">Unutra</div>
+      <div class="status-value" id="currentTemp">--°C</div>
+      <div class="status-sub" id="lastUpdateText">Pre -- s</div>
+    </div>
+    <div class="status-item">
+      <div class="status-label">Napolju (Kraljevo)</div>
+      <div class="status-value" id="outdoorTemp">--°C</div>
+      <div class="status-sub">OpenWeatherMap</div>
+    </div>
+    <div class="status-item" id="cardHeating">
+      <div class="status-label">Grejanje</div>
+      <div class="status-value" id="heatingStatus">--</div>
+      <div class="status-sub" id="targetTempSub">Cilj: --°C</div>
+    </div>
+    <div class="status-item">
+      <div class="status-label">Režim rada</div>
+      <div class="status-value" id="modeStatus">--</div>
+      <div class="status-sub" id="activePeriodSub">Raspored</div>
+    </div>
+  </div>
+
+  <!-- TAB 1: KONTROLA -->
+  <div id="tab-control" class="tab-content active">
+    <div class="thermostat-hero">
+      <!-- Left: Visual Dial -->
+      <div class="dial-card">
+        <div class="thermostat-ring" id="thermostatRing">
+          <span class="ring-label" id="ringStateLabel">TRENUTNA</span>
+          <div class="ring-temp" id="dialCurrentTemp">--.-°</div>
+          <span class="ring-target" id="dialTargetBadge">Cilj: 24.0°C</span>
+        </div>
+        <div class="sensor-health-bar">
+          <span>🔌 Napajanje senzora:</span>
+          <span class="battery-pill" id="sensorBatteryPill">⚡ Direktno (USB/AC)</span>
+        </div>
+      </div>
+
+      <!-- Right: Mode & Manual Controls -->
+      <div class="controls-card">
+        <div class="section-title">
+          <span>Upravljanje režimom</span>
+        </div>
+        <div class="button-group">
+          <button class="mode-btn btn-auto" id="btnModeAuto" onclick="setMode('auto')">
+            <span class="mode-emoji">⚙️</span>
+            <span>Auto</span>
+          </button>
+          <button class="mode-btn btn-on" id="btnModeOn" onclick="setMode('on')">
+            <span class="mode-emoji">🔥</span>
+            <span>Uključi</span>
+          </button>
+          <button class="mode-btn btn-off" id="btnModeOff" onclick="setMode('off')">
+            <span class="mode-emoji">❄️</span>
+            <span>Isključi</span>
+          </button>
+        </div>
+
+        <div class="control-group" id="manualTempControl" style="display:none">
+          <div class="slider-header">
+            <label for="manualTargetTemp">Ciljna temperatura (ručni režim)</label>
+            <div class="temp-value-display" id="manualTargetTempDisplay">26.0°C</div>
+          </div>
+          <div class="temp-slider-wrap">
+            <button class="step-btn" type="button" onclick="stepManualTemp(-0.5)">−</button>
+            <input type="range" id="manualTargetTemp" min="15" max="35" step="0.5" value="26">
+            <button class="step-btn" type="button" onclick="stepManualTemp(0.5)">+</button>
+          </div>
+        </div>
+
+        <div id="autoModeSummary" style="margin-top:14px;font-size:13px;color:var(--text-secondary);background:var(--bg-card-alt);padding:12px 14px;border-radius:10px;border:1px solid var(--border-color)">
+          💡 U <strong>Auto</strong> režimu kontroler prati dnevni raspored za današnji dan sa podešenim histerezisom.
+        </div>
+      </div>
+    </div>
+
+    <!-- 24h Schedule Timeline Visualization -->
+    <div class="timeline-card">
+      <div class="section-title">
+        <span>📅 Današnji pregled grejanja (00:00 – 24:00)</span>
+        <span style="font-size:12px;color:var(--text-secondary)" id="timelineNightLabel">Noćna: 17.0°C</span>
+      </div>
+      <div class="timeline-bar" id="timelineBar"></div>
+      <div class="timeline-hours">
+        <span>00h</span><span>04h</span><span>08h</span><span>12h</span><span>16h</span><span>20h</span><span>24h</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 2: PODEŠAVANJA -->
+  <div id="tab-settings" class="tab-content">
+    <div class="day-tabs" id="dayTabs"></div>
+    <div class="schedule-editor">
+      <!-- Period 1 -->
+      <div class="period" id="periodCard1">
+        <div class="period-header">
+          <h3>⏰ Period 1 (Jutro)</h3>
+          <label class="switch-wrap">
+            <input type="checkbox" id="p1_enabled" checked onchange="updatePeriodVisuals()">
+            <span>Aktivan</span>
+          </label>
+        </div>
+        <div class="period-row">
+          <div class="field-box time-input">
+            <label>Početak:</label>
+            <div class="time-inputs-inline">
+              <input type="number" id="p1_sh" min="0" max="23" value="6">:<input type="number" id="p1_sm" min="0" max="59" value="00">
+            </div>
+          </div>
+          <div class="field-box time-input">
+            <label>Kraj:</label>
+            <div class="time-inputs-inline">
+              <input type="number" id="p1_eh" min="0" max="23" value="10">:<input type="number" id="p1_em" min="0" max="59" value="00">
+            </div>
+          </div>
+          <div class="field-box temp-input">
+            <label>Ciljna temp:</label>
+            <div class="time-inputs-inline">
+              <input type="number" id="p1_temp" min="10" max="30" step="0.5" value="24">°C
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Period 2 -->
+      <div class="period" id="periodCard2">
+        <div class="period-header">
+          <h3>☀️ Period 2 (Podne)</h3>
+          <label class="switch-wrap">
+            <input type="checkbox" id="p2_enabled" checked onchange="updatePeriodVisuals()">
+            <span>Aktivan</span>
+          </label>
+        </div>
+        <div class="period-row">
+          <div class="field-box time-input">
+            <label>Početak:</label>
+            <div class="time-inputs-inline">
+              <input type="number" id="p2_sh" min="0" max="23" value="14">:<input type="number" id="p2_sm" min="0" max="59" value="00">
+            </div>
+          </div>
+          <div class="field-box time-input">
+            <label>Kraj:</label>
+            <div class="time-inputs-inline">
+              <input type="number" id="p2_eh" min="0" max="23" value="16">:<input type="number" id="p2_em" min="0" max="59" value="00">
+            </div>
+          </div>
+          <div class="field-box temp-input">
+            <label>Ciljna temp:</label>
+            <div class="time-inputs-inline">
+              <input type="number" id="p2_temp" min="10" max="30" step="0.5" value="24">°C
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Period 3 -->
+      <div class="period" id="periodCard3">
+        <div class="period-header">
+          <h3>🌙 Period 3 (Veče)</h3>
+          <label class="switch-wrap">
+            <input type="checkbox" id="p3_enabled" checked onchange="updatePeriodVisuals()">
+            <span>Aktivan</span>
+          </label>
+        </div>
+        <div class="period-row">
+          <div class="field-box time-input">
+            <label>Početak:</label>
+            <div class="time-inputs-inline">
+              <input type="number" id="p3_sh" min="0" max="23" value="17">:<input type="number" id="p3_sm" min="0" max="59" value="00">
+            </div>
+          </div>
+          <div class="field-box time-input">
+            <label>Kraj:</label>
+            <div class="time-inputs-inline">
+              <input type="number" id="p3_eh" min="0" max="23" value="23">:<input type="number" id="p3_em" min="0" max="59" value="00">
+            </div>
+          </div>
+          <div class="field-box temp-input">
+            <label>Ciljna temp:</label>
+            <div class="time-inputs-inline">
+              <input type="number" id="p3_temp" min="10" max="30" step="0.5" value="24">°C
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-grid-bottom">
+        <!-- Night Temp -->
+        <div class="night-temp">
+          <h3>🌃 Noćna / van-perioda temp</h3>
+          <div class="field-box temp-input">
+            <label>Održavaj minimum:</label>
+            <div class="time-inputs-inline">
+              <input type="number" id="night_temp" min="10" max="25" step="0.5" value="17">°C
+            </div>
+          </div>
+          <div class="action-row">
+            <button class="save-btn" type="button" onclick="saveSchedule()">💾 Sačuvaj raspored</button>
+            <button class="save-btn secondary" type="button" onclick="copyScheduleToAllDays()">📋 Kopiraj na sve dane</button>
+          </div>
+        </div>
+
+        <!-- Hysteresis -->
+        <div class="night-temp hyst-card">
+          <h3>⚙️ Histerezis (osetljivost releja)</h3>
+          <div class="field-box temp-input" style="margin-bottom:8px">
+            <label>Uključi kada padne za (−):</label>
+            <div class="time-inputs-inline">
+              <input type="number" id="hyst_on" min="0.5" max="5" step="0.1" value="2.0" oninput="updateHystPreview()">°C
+            </div>
+          </div>
+          <div class="field-box temp-input">
+            <label>Isključi kada pređe za (+):</label>
+            <div class="time-inputs-inline">
+              <input type="number" id="hyst_off" min="0" max="2" step="0.1" value="0.5" oninput="updateHystPreview()">°C
+            </div>
+          </div>
+          <div class="hyst-explain" id="hystPreviewText">
+            Primer za cilj 24.0°C: pali na <strong>22.0°C</strong>, gasi na <strong>24.5°C</strong>.
+          </div>
+          <div class="action-row">
+            <button class="save-btn warn" type="button" onclick="saveHysteresis()">💾 Sačuvaj histerezis</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 3: SISTEM -->
+  <div id="tab-system" class="tab-content">
+    <div class="system-grid">
+      <div class="system-info">
+        <h3>📶 Status mreže i kontrolera</h3>
+        <div class="info-row">
+          <span class="info-label">WiFi Mreža (SSID):</span>
+          <span class="info-value" id="sys-ssid">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">IP Adresa:</span>
+          <span class="info-value" id="sys-ip">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Jačina signala (RSSI):</span>
+          <span class="info-value" id="sys-rssi">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Vreme rada (Uptime):</span>
+          <span class="info-value" id="sys-uptime">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Slobodna memorija (Heap):</span>
+          <span class="info-value" id="sys-heap">--</span>
+        </div>
+      </div>
+
+      <div class="system-actions">
+        <button class="system-btn btn-warning" type="button" onclick="resetWiFi()">
+          <span class="btn-icon">🔄</span>
+          <span class="btn-text">Resetuj WiFi podešavanja</span>
+          <span class="btn-desc">Briše sačuvanu WiFi mrežu i pokreće "Termostat-Setup" AP</span>
+        </button>
+        <button class="system-btn btn-danger" type="button" onclick="restartDevice()">
+          <span class="btn-icon">♻️</span>
+          <span class="btn-text">Restartuj uređaj</span>
+          <span class="btn-desc">Bezbedno ponovo pokreće ESP8266 kontroler</span>
+        </button>
+        <div class="system-note">
+          <strong>💡 Fizički tasteri:</strong><br>
+          • <strong>Kontroler (D6):</strong> &lt;3s pali/gasi | 3–10s AUTO | &gt;10s WiFi Reset<br>
+          • <strong>Termometar (D3):</strong> kratko = ekran (15s) | <strong>drži &gt;2s = uključi OTA režim (5 min)</strong>
+        </div>
+      </div>
+    </div>
+
+    <!-- OTA Firmware / LittleFS Update Card -->
+    <div class="ota-card">
+      <h3>📦 Bežično OTA Ažuriranje (Web &amp; PlatformIO)</h3>
+      <p style="font-size:13px;color:var(--text-secondary);margin-bottom:10px">
+        Izaberi kompajlirani <code>firmware.bin</code> (ili <code>littlefs.bin</code>) fajl iz PlatformIO foldera <code>.pio/build/kontroler/</code> za direktan bežični upis kroz pregledač:
+      </p>
+      <div class="ota-upload-row">
+        <input type="file" id="otaFileInput" class="ota-file-input" accept=".bin,.bin.gz">
+        <select id="otaTypeSelect" style="padding:11px 12px;border-radius:10px;background:var(--bg-card-alt);color:var(--text-primary);border:1px solid var(--border-color);font-weight:600;font-size:13px">
+          <option value="firmware">Firmware (kod)</option>
+          <option value="filesystem">LittleFS (web)</option>
+        </select>
+        <button class="save-btn" type="button" style="flex:0 0 auto;min-width:160px;margin:0" onclick="uploadOTAFile()">🚀 Pokreni OTA Update</button>
+      </div>
+      <div class="ota-progress-wrap" id="otaProgressWrap">
+        <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;margin-bottom:4px">
+          <span id="otaStatusLabel">Slanje fajla...</span>
+          <span id="otaPercentLabel">0%</span>
+        </div>
+        <div class="ota-progress-bar">
+          <div class="ota-progress-fill" id="otaProgressFill"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- Confirmation Modal -->
+<div class="modal-backdrop" id="confirmModal">
+  <div class="modal-box">
+    <div class="modal-title" id="modalTitle">Potvrda akcije</div>
+    <div class="modal-body" id="modalBody">Da li ste sigurni?</div>
+    <div class="modal-actions">
+      <button class="modal-btn" type="button" onclick="closeModal()">Otkaži</button>
+      <button class="modal-btn confirm" type="button" id="modalConfirmBtn">Potvrdi</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const days = ['Nedelja', 'Ponedeljak', 'Utorak', 'Sreda', 'Četvrtak', 'Petak', 'Subota'];
+  let currentDay = 0;
+  let isDraggingSlider = false;
+  let systemIntervalId = null;
+  let isDemoMode = false;
+
+  const demoState = {
+    currentTemp: 22.8,
+    outdoorTemp: 13.5,
+    heatingOn: true,
+    manualMode: false,
+    manualForceOff: false,
+    manualTargetTemp: 25.0,
+    lastUpdate: 14,
+    currentDay: new Date().getDay(),
+    currentHour: new Date().getHours(),
+    currentMinute: new Date().getMinutes(),
+    hysteresisOn: 1.5,
+    hysteresisOff: 0.5,
+    lowBattery: false,
+    batteryVoltage: 0.0,
+    batteryPercent: 0,
+    ssid: 'Eeeee',
+    ip: '192.168.1.65',
+    rssi: -54,
+    uptime: '6d 04h 18m',
+    freeHeap: 36420,
+    schedules: Array.from({ length: 7 }, (_, i) => ({
+      p1: { enabled: true, startHour: (i === 0 || i === 6) ? 8 : 6, startMinute: 0, endHour: 10, endMinute: 0, targetTemp: 23.5 },
+      p2: { enabled: true, startHour: 13, startMinute: 30, endHour: 16, endMinute: 0, targetTemp: 23.0 },
+      p3: { enabled: true, startHour: 17, startMinute: 30, endHour: 22, endMinute: 30, targetTemp: 24.0 },
+      nightTemp: 18.0
+    }))
+  };
+
+  async function apiRequest(endpoint, options = {}) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 1800);
+      const response = await fetch(endpoint, { ...options, signal: controller.signal });
+      clearTimeout(timeout);
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      isDemoMode = false;
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        return await response.json();
+      }
+      return await response.text();
+    } catch (err) {
+      isDemoMode = true;
+      return handleDemoRequest(endpoint, options);
+    }
+  }
+
+  function handleDemoRequest(endpoint, options) {
+    const now = new Date();
+    demoState.currentDay = now.getDay();
+    demoState.currentHour = now.getHours();
+    demoState.currentMinute = now.getMinutes();
+
+    if (endpoint.startsWith('/api/status')) {
+      return { ...demoState };
+    }
+    if (endpoint.startsWith('/api/time')) {
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      return {
+        hour: now.getHours(),
+        minute: now.getMinutes(),
+        day: now.getDay(),
+        dayName: days[now.getDay()],
+        timeStr: `${hh}:${mm}`
+      };
+    }
+    if (endpoint.startsWith('/api/manual')) {
+      const urlObj = new URL(endpoint, 'http://localhost');
+      const mode = urlObj.searchParams.get('mode');
+      const temp = urlObj.searchParams.get('temp');
+      if (mode === 'auto') {
+        demoState.manualMode = false;
+        demoState.manualForceOff = false;
+        demoState.heatingOn = demoState.currentTemp < 23.5;
+      } else if (mode === 'on') {
+        demoState.manualMode = true;
+        demoState.manualForceOff = false;
+        demoState.heatingOn = demoState.currentTemp < demoState.manualTargetTemp;
+      } else if (mode === 'off') {
+        demoState.manualMode = true;
+        demoState.manualForceOff = true;
+        demoState.heatingOn = false;
+      }
+      if (temp !== null) {
+        demoState.manualTargetTemp = parseFloat(temp);
+        if (demoState.manualMode && !demoState.manualForceOff) {
+          demoState.heatingOn = demoState.currentTemp < demoState.manualTargetTemp;
+        }
+      }
+      return 'OK';
+    }
+    if (endpoint.startsWith('/api/schedule')) {
+      if (options.method === 'POST' && options.body) {
+        const body = JSON.parse(options.body);
+        demoState.schedules[body.day] = {
+          p1: body.p1,
+          p2: body.p2,
+          p3: body.p3,
+          nightTemp: body.nightTemp
+        };
+        return 'Schedule updated';
+      } else {
+        const urlObj = new URL(endpoint, 'http://localhost');
+        const d = parseInt(urlObj.searchParams.get('day') || '0', 10);
+        return demoState.schedules[d] || demoState.schedules[0];
+      }
+    }
+    if (endpoint.startsWith('/api/hysteresis') && options.method === 'POST') {
+      const body = JSON.parse(options.body);
+      demoState.hysteresisOn = body.on;
+      demoState.hysteresisOff = body.off;
+      return 'Hysteresis updated';
+    }
+    if (endpoint.startsWith('/api/system')) {
+      return {
+        ssid: demoState.ssid,
+        ip: demoState.ip,
+        rssi: demoState.rssi,
+        uptime: demoState.uptime,
+        freeHeap: demoState.freeHeap
+      };
+    }
+    return 'OK';
+  }
+
+  function showToast(msg) {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = msg;
+    container.appendChild(toast);
+    setTimeout(() => {
+      toast.remove();
+    }, 3200);
+  }
+
+  function openConfirmModal(title, body, onConfirm) {
+    document.getElementById('modalTitle').textContent = title;
+    document.getElementById('modalBody').textContent = body;
+    const confirmBtn = document.getElementById('modalConfirmBtn');
+    confirmBtn.onclick = () => {
+      closeModal();
+      onConfirm();
+    };
+    document.getElementById('confirmModal').classList.add('open');
+  }
+
+  function closeModal() {
+    document.getElementById('confirmModal').classList.remove('open');
+  }
+
+  function toggleTheme() {
+    const html = document.documentElement;
+    const next = html.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    html.setAttribute('data-theme', next);
+    try {
+      localStorage.setItem('thermostat_theme', next);
+    } catch (e) {}
+  }
+
+  function switchTab(tabName) {
+    document.querySelectorAll('.tab-content').forEach(tab => {
+      tab.classList.remove('active');
+    });
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-tab') === tabName);
+    });
+
+    const targetTab = document.getElementById('tab-' + tabName);
+    if (targetTab) targetTab.classList.add('active');
+
+    if (systemIntervalId) {
+      clearInterval(systemIntervalId);
+      systemIntervalId = null;
+    }
+
+    if (tabName === 'settings') {
+      setTimeout(scrollToActiveDay, 80);
+    } else if (tabName === 'system') {
+      loadSystemInfo();
+      systemIntervalId = setInterval(loadSystemInfo, 5000);
+    }
+  }
+
+  const manualTempSlider = document.getElementById('manualTargetTemp');
+  const manualTempDisplay = document.getElementById('manualTargetTempDisplay');
+
+  manualTempSlider.addEventListener('pointerdown', () => { isDraggingSlider = true; });
+  manualTempSlider.addEventListener('touchstart', () => { isDraggingSlider = true; }, { passive: true });
+
+  manualTempSlider.addEventListener('input', function () {
+    isDraggingSlider = true;
+    manualTempDisplay.textContent = parseFloat(this.value).toFixed(1) + '°C';
+  });
+
+  manualTempSlider.addEventListener('change', function () {
+    isDraggingSlider = false;
+    const val = parseFloat(this.value).toFixed(1);
+    apiRequest('/api/manual?temp=' + val).then(() => {
+      showToast('🎯 Ručna ciljna temperatura: ' + val + '°C');
+      updateStatus();
+    });
+  });
+
+  function stepManualTemp(delta) {
+    let val = parseFloat(manualTempSlider.value) + delta;
+    if (val < 15) val = 15;
+    if (val > 35) val = 35;
+    manualTempSlider.value = val;
+    manualTempDisplay.textContent = val.toFixed(1) + '°C';
+    apiRequest('/api/manual?temp=' + val.toFixed(1)).then(() => {
+      showToast('🎯 Ručna ciljna temperatura: ' + val.toFixed(1) + '°C');
+      updateStatus();
+    });
+  }
+
+  function setMode(m) {
+    apiRequest('/api/manual?mode=' + m).then(() => {
+      const labels = { auto: '⚙️ Automatski režim aktiviran', on: '🔥 Ručno grejanje uključeno', off: '❄️ Grejanje ručno isključeno' };
+      showToast(labels[m] || 'Režim promenjen');
+      updateModeButtonsUI(m === 'auto' ? false : true, m === 'off');
+      updateStatus();
+    });
+  }
+
+  function updateModeButtonsUI(manualMode, forceOff) {
+    const btnAuto = document.getElementById('btnModeAuto');
+    const btnOn = document.getElementById('btnModeOn');
+    const btnOff = document.getElementById('btnModeOff');
+    btnAuto.className = 'mode-btn btn-auto' + (!manualMode ? ' active-auto' : '');
+    btnOn.className = 'mode-btn btn-on' + (manualMode && !forceOff ? ' active-on' : '');
+    btnOff.className = 'mode-btn btn-off' + (manualMode && forceOff ? ' active-off' : '');
+
+    document.getElementById('manualTempControl').style.display = (manualMode && !forceOff) ? 'block' : 'none';
+    document.getElementById('autoModeSummary').style.display = (!manualMode) ? 'block' : 'none';
+  }
+
+  function setCurrentDay() {
+    apiRequest('/api/time').then(d => {
+      if (d && d.day !== undefined) {
+        currentDay = d.day;
+        document.getElementById('currentTime').textContent = d.dayName + ', ' + d.timeStr;
+      }
+      createDayTabs();
+      loadSchedule(currentDay);
+      scrollToActiveDay();
+    });
+  }
+
+  function loadHysteresis() {
+    apiRequest('/api/status').then(d => {
+      if (d && d.hysteresisOn !== undefined && d.hysteresisOff !== undefined) {
+        document.getElementById('hyst_on').value = d.hysteresisOn.toFixed(1);
+        document.getElementById('hyst_off').value = d.hysteresisOff.toFixed(1);
+        updateHystPreview();
+      }
+    });
+  }
+
+  function updateHystPreview() {
+    const onVal = parseFloat(document.getElementById('hyst_on').value) || 0;
+    const offVal = parseFloat(document.getElementById('hyst_off').value) || 0;
+    const base = 24.0;
+    const el = document.getElementById('hystPreviewText');
+    if (el) {
+      el.innerHTML = `Primer za cilj 24.0°C: pali na <strong>${(base - onVal).toFixed(1)}°C</strong>, gasi na <strong>${(base + offVal).toFixed(1)}°C</strong>.`;
+    }
+  }
+
+  function createDayTabs() {
+    const c = document.getElementById('dayTabs');
+    c.innerHTML = '';
+    days.forEach((d, i) => {
+      const b = document.createElement('button');
+      b.className = 'day-tab' + (i === currentDay ? ' active' : '');
+      b.textContent = d;
+      b.onclick = () => selectDay(i);
+      c.appendChild(b);
+    });
+  }
+
+  function scrollToActiveDay() {
+    const container = document.getElementById('dayTabs');
+    const activeTab = container ? container.querySelector('.day-tab.active') : null;
+    if (activeTab && container) {
+      const scrollPosition = activeTab.offsetLeft - (container.offsetWidth / 2) + (activeTab.offsetWidth / 2);
+      container.scrollTo({ left: scrollPosition, behavior: 'smooth' });
+    }
+  }
+
+  function selectDay(d) {
+    currentDay = d;
+    document.querySelectorAll('.day-tab').forEach((t, i) => {
+      t.classList.toggle('active', i === d);
+    });
+    loadSchedule(d);
+    scrollToActiveDay();
+  }
+
+  function updatePeriodVisuals() {
+    [1, 2, 3].forEach(idx => {
+      const chk = document.getElementById(`p${idx}_enabled`);
+      const card = document.getElementById(`periodCard${idx}`);
+      if (chk && card) {
+        card.classList.toggle('disabled-period', !chk.checked);
+      }
+    });
+  }
+
+  function loadSchedule(d) {
+    apiRequest('/api/schedule?day=' + d).then(data => {
+      if (!data || !data.p1) return;
+      ['p1', 'p2', 'p3'].forEach(p => {
+        document.getElementById(p + '_enabled').checked = data[p].enabled;
+        document.getElementById(p + '_sh').value = data[p].startHour;
+        document.getElementById(p + '_sm').value = String(data[p].startMinute).padStart(2, '0');
+        document.getElementById(p + '_eh').value = data[p].endHour;
+        document.getElementById(p + '_em').value = String(data[p].endMinute).padStart(2, '0');
+        document.getElementById(p + '_temp').value = data[p].targetTemp;
+      });
+      document.getElementById('night_temp').value = data.nightTemp;
+      updatePeriodVisuals();
+      renderTimeline(data);
+    });
+  }
+
+  function renderTimeline(sched) {
+    const bar = document.getElementById('timelineBar');
+    if (!bar || !sched) return;
+    bar.innerHTML = '';
+
+    const nightLbl = document.getElementById('timelineNightLabel');
+    if (nightLbl) nightLbl.textContent = `Noćna / osnovna: ${parseFloat(sched.nightTemp).toFixed(1)}°C`;
+
+    ['p1', 'p2', 'p3'].forEach(key => {
+      const p = sched[key];
+      if (!p || !p.enabled) return;
+      const startMin = p.startHour * 60 + p.startMinute;
+      const endMin = p.endHour * 60 + p.endMinute;
+      if (endMin <= startMin) return;
+      const leftPct = (startMin / 1440) * 100;
+      const widthPct = ((endMin - startMin) / 1440) * 100;
+      const slot = document.createElement('div');
+      slot.className = 'timeline-slot';
+      slot.style.left = leftPct + '%';
+      slot.style.width = widthPct + '%';
+      slot.textContent = `${p.targetTemp}°C`;
+      bar.appendChild(slot);
+    });
+
+    const now = new Date();
+    const nowPct = ((now.getHours() * 60 + now.getMinutes()) / 1440) * 100;
+    const marker = document.createElement('div');
+    marker.className = 'timeline-now';
+    marker.style.left = nowPct + '%';
+    bar.appendChild(marker);
+  }
+
+  function collectSchedulePayload(dayIndex) {
+    return {
+      day: dayIndex,
+      p1: {
+        enabled: document.getElementById('p1_enabled').checked,
+        startHour: parseInt(document.getElementById('p1_sh').value, 10) || 0,
+        startMinute: parseInt(document.getElementById('p1_sm').value, 10) || 0,
+        endHour: parseInt(document.getElementById('p1_eh').value, 10) || 0,
+        endMinute: parseInt(document.getElementById('p1_em').value, 10) || 0,
+        targetTemp: parseFloat(document.getElementById('p1_temp').value) || 22
+      },
+      p2: {
+        enabled: document.getElementById('p2_enabled').checked,
+        startHour: parseInt(document.getElementById('p2_sh').value, 10) || 0,
+        startMinute: parseInt(document.getElementById('p2_sm').value, 10) || 0,
+        endHour: parseInt(document.getElementById('p2_eh').value, 10) || 0,
+        endMinute: parseInt(document.getElementById('p2_em').value, 10) || 0,
+        targetTemp: parseFloat(document.getElementById('p2_temp').value) || 22
+      },
+      p3: {
+        enabled: document.getElementById('p3_enabled').checked,
+        startHour: parseInt(document.getElementById('p3_sh').value, 10) || 0,
+        startMinute: parseInt(document.getElementById('p3_sm').value, 10) || 0,
+        endHour: parseInt(document.getElementById('p3_eh').value, 10) || 0,
+        endMinute: parseInt(document.getElementById('p3_em').value, 10) || 0,
+        targetTemp: parseFloat(document.getElementById('p3_temp').value) || 22
+      },
+      nightTemp: parseFloat(document.getElementById('night_temp').value) || 17
+    };
+  }
+
+  function saveHysteresis() {
+    const data = {
+      on: parseFloat(document.getElementById('hyst_on').value),
+      off: parseFloat(document.getElementById('hyst_off').value)
+    };
+    apiRequest('/api/hysteresis', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    }).then(() => {
+      showToast('✅ Histerezis uspešno sačuvan!');
+    });
+  }
+
+  function saveSchedule() {
+    const data = collectSchedulePayload(currentDay);
+    apiRequest('/api/schedule', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    }).then(() => {
+      renderTimeline(data);
+      showToast('✅ Raspored sačuvan za ' + days[currentDay] + '!');
+    });
+  }
+
+  function copyScheduleToAllDays() {
+    openConfirmModal(
+      'Kopiraj raspored na celu nedelju?',
+      `Ovo će primeniti trenutna podešavanja (${days[currentDay]}) na svih 7 dana u nedelji.`,
+      async () => {
+        for (let d = 0; d < 7; d++) {
+          const payload = collectSchedulePayload(d);
+          await apiRequest('/api/schedule', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        }
+        showToast('📋 Raspored je kopiran na svih 7 dana!');
+      }
+    );
+  }
+
+  function drawBatteryIcon(percent) {
+    const icon = document.getElementById('batteryIcon');
+    if (!icon) return;
+    let fillColor = '#10b981';
+    if (percent < 20) fillColor = '#ef4444';
+    else if (percent < 40) fillColor = '#f59e0b';
+
+    icon.innerHTML = `
+      <svg width="60" height="30" viewBox="0 0 60 30">
+        <rect x="2" y="5" width="50" height="20" rx="3" fill="none" stroke="currentColor" stroke-width="2"/>
+        <rect x="52" y="10" width="6" height="10" rx="1" fill="currentColor"/>
+        <rect x="4" y="7" width="${Math.max(2, percent * 0.46)}" height="16" rx="2" fill="${fillColor}"/>
+        <text x="27" y="19" fill="currentColor" font-size="10" text-anchor="middle" font-weight="bold">${percent}%</text>
+      </svg>
+    `;
+  }
+
+  function updateStatus() {
+    apiRequest('/api/status').then(d => {
+      if (!d) return;
+      const tempTxt = d.currentTemp.toFixed(1) + '°C';
+      document.getElementById('currentTemp').textContent = tempTxt;
+      document.getElementById('dialCurrentTemp').textContent = d.currentTemp.toFixed(1) + '°';
+
+      if (d.outdoorTemp > -99) {
+        document.getElementById('outdoorTemp').textContent = d.outdoorTemp.toFixed(1) + '°C';
+      } else {
+        document.getElementById('outdoorTemp').textContent = '--°C';
+      }
+
+      document.getElementById('heatingStatus').textContent = d.heatingOn ? '🔥 UKLJUČENO' : '❄️ MIRUJE';
+      document.getElementById('modeStatus').textContent = d.manualMode ? '✋ RUČNO' : '⚙️ AUTO';
+
+      const ring = document.getElementById('thermostatRing');
+      const cardHeating = document.getElementById('cardHeating');
+      if (ring) ring.classList.toggle('heating', !!d.heatingOn);
+      if (cardHeating) cardHeating.classList.toggle('heating-active', !!d.heatingOn);
+
+      const lastUpd = d.lastUpdate !== undefined ? d.lastUpdate : 0;
+      const lastUpdateEl = document.getElementById('lastUpdateText');
+      const connBadge = document.getElementById('connBadge');
+      const connText = document.getElementById('connText');
+
+      if (lastUpdateEl) {
+        lastUpdateEl.textContent = lastUpd < 60 ? `Pre ${lastUpd}s` : `Pre ${Math.floor(lastUpd / 60)}m`;
+      }
+      if (connBadge && connText) {
+        if (isDemoMode) {
+          connBadge.className = 'conn-badge demo';
+          connText.textContent = 'Demo prikaz (Offline)';
+        } else if (lastUpd > 600) {
+          connBadge.className = 'conn-badge stale';
+          connText.textContent = 'Senzor se ne javlja!';
+        } else {
+          connBadge.className = 'conn-badge';
+          connText.textContent = 'Senzor povezan';
+        }
+      }
+
+      if (d.currentDay !== undefined && d.currentHour !== undefined && d.currentMinute !== undefined) {
+        const hh = String(d.currentHour).padStart(2, '0');
+        const mm = String(d.currentMinute).padStart(2, '0');
+        document.getElementById('currentTime').textContent = `${days[d.currentDay]}, ${hh}:${mm}`;
+      }
+
+      if (d.manualTargetTemp !== undefined && !isDraggingSlider) {
+        manualTempSlider.value = d.manualTargetTemp;
+        manualTempDisplay.textContent = d.manualTargetTemp.toFixed(1) + '°C';
+      }
+
+      const forceOff = d.manualForceOff || (d.manualMode && !d.heatingOn && d.currentTemp < (d.manualTargetTemp - (d.hysteresisOn || 2)));
+      updateModeButtonsUI(d.manualMode, forceOff);
+
+      const shownTarget = d.manualMode ? (forceOff ? 'OFF' : d.manualTargetTemp.toFixed(1) + '°C') : (d.targetTemp !== undefined ? d.targetTemp.toFixed(1) + '°C' : 'Po rasporedu');
+      document.getElementById('targetTempSub').textContent = 'Cilj: ' + shownTarget;
+      document.getElementById('dialTargetBadge').textContent = d.manualMode ? `Ručno: ${shownTarget}` : `Auto cilj: ${shownTarget}`;
+
+      const pillEl = document.getElementById('sensorBatteryPill');
+      const warning = document.getElementById('batteryWarning');
+      if (d.batteryVoltage && d.batteryVoltage > 0.5) {
+        const percentEl = document.getElementById('batteryPercent');
+        const voltageEl = document.getElementById('batteryVoltage');
+        const messageEl = document.getElementById('batteryMessage');
+
+        if (percentEl) percentEl.textContent = d.batteryPercent + '%';
+        if (voltageEl) voltageEl.textContent = d.batteryVoltage.toFixed(2) + 'V';
+        if (pillEl) pillEl.textContent = `🔋 ${d.batteryPercent}% (${d.batteryVoltage.toFixed(2)}V)`;
+
+        drawBatteryIcon(d.batteryPercent);
+
+        if (d.lowBattery) {
+          warning.style.display = 'block';
+          if (messageEl) {
+            messageEl.textContent = d.batteryPercent < 10
+              ? '🔴 KRITIČNO: Baterija termometra skoro prazna!'
+              : '🟡 UPOZORENJE: Niska baterija na termometru!';
+          }
+        } else {
+          warning.style.display = 'none';
+        }
+      } else {
+        if (pillEl) pillEl.textContent = '⚡ Direktno (USB/AC)';
+        if (warning) warning.style.display = 'none';
+      }
+    });
+  }
+
+  function loadSystemInfo() {
+    apiRequest('/api/system').then(d => {
+      if (!d) return;
+      document.getElementById('sys-ssid').textContent = d.ssid || '--';
+      document.getElementById('sys-ip').textContent = d.ip || '--';
+      document.getElementById('sys-rssi').textContent = (d.rssi !== undefined ? d.rssi + ' dBm' : '--');
+      document.getElementById('sys-uptime').textContent = d.uptime || '--';
+      document.getElementById('sys-heap').textContent = d.freeHeap ? (d.freeHeap / 1024).toFixed(1) + ' KB' : '--';
+    });
+  }
+
+  function resetWiFi() {
+    openConfirmModal(
+      '⚠️ Resetuj WiFi podešavanja?',
+      'Ovo će obrisati sačuvanu WiFi mrežu i restartovati kontroler u "Termostat-Setup" režim.',
+      () => {
+        apiRequest('/api/reset-wifi', { method: 'POST' }).then(() => {
+          showToast('✅ WiFi resetovan! Povežite se na "Termostat-Setup".');
+        });
+      }
+    );
+  }
+
+  function restartDevice() {
+    openConfirmModal(
+      '♻️ Restartuj kontroler?',
+      'Kontroler grejanja će se ponovo pokrenuti. Sačekajte oko 20 sekundi.',
+      () => {
+        apiRequest('/api/restart', { method: 'POST' }).then(() => {
+          showToast('✅ Uređaj se restartuje...');
+        });
+      }
+    );
+  }
+
+  function uploadOTAFile() {
+    const fileInput = document.getElementById('otaFileInput');
+    const modeSelect = document.getElementById('otaTypeSelect');
+    const wrap = document.getElementById('otaProgressWrap');
+    const fill = document.getElementById('otaProgressFill');
+    const pctLbl = document.getElementById('otaPercentLabel');
+    const statusLbl = document.getElementById('otaStatusLabel');
+
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+      showToast('⚠️ Prvo izaberi .bin fajl za OTA ažuriranje!');
+      return;
+    }
+
+    const file = fileInput.files[0];
+    const updateType = modeSelect ? modeSelect.value : 'firmware';
+    wrap.style.display = 'block';
+    fill.style.width = '0%';
+    pctLbl.textContent = '0%';
+    statusLbl.textContent = 'Slanje ' + file.name + '...';
+
+    if (isDemoMode) {
+      let p = 0;
+      const timer = setInterval(() => {
+        p += 20;
+        fill.style.width = p + '%';
+        pctLbl.textContent = p + '%';
+        if (p >= 100) {
+          clearInterval(timer);
+          statusLbl.textContent = '✅ OTA uspešan (Demo simulacija)!';
+          showToast('🚀 OTA ažuriranje završeno!');
+        }
+      }, 300);
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append(updateType, file, file.name);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/firmware', true);
+    xhr.upload.onprogress = function (e) {
+      if (e.lengthComputable) {
+        const pct = Math.round((e.loaded / e.total) * 100);
+        fill.style.width = pct + '%';
+        pctLbl.textContent = pct + '%';
+      }
+    };
+    xhr.onload = function () {
+      if (xhr.status === 200) {
+        statusLbl.textContent = '✅ Uspešno! Kontroler se restartuje...';
+        showToast('🚀 OTA uspešan! Sačekajte 20s da se uređaj restartuje.');
+      } else {
+        statusLbl.textContent = '❌ Greška pri OTA ažuriranju (' + xhr.status + ')';
+        showToast('❌ OTA greška: ' + xhr.status);
+      }
+    };
+    xhr.onerror = function () {
+      statusLbl.textContent = '❌ Prekid veze (uređaj se možda već restartuje)';
+    };
+    xhr.send(formData);
+  }
+
+  (function init() {
+    try {
+      const savedTheme = localStorage.getItem('thermostat_theme');
+      if (savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
+    } catch (e) {}
+    setCurrentDay();
+    loadHysteresis();
+    updateStatus();
+    setInterval(updateStatus, 3000);
+  })();
+</script>
+</body>
+</html>

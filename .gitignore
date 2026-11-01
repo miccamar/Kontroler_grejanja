@@ -1,0 +1,20 @@
+# PlatformIO build artifacts & libraries
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# VS Code settings
+.vscode/
+*.code-workspace
+
+# Build output
+*.elf
+*.bin
+*.hex
+*.map
+
+# Editor backups & OS files
+*~
+*.swp
+.DS_Store
+Thumbs.db
