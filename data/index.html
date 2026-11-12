@@ -1051,6 +1051,60 @@
     border-color: var(--danger);
   }
 
+  /* Rad grejanja */
+  .heatlog-stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .heatlog-stat {
+    background: var(--bg-card-alt);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+  }
+  .hl-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+  .hl-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--accent);
+    margin-top: 2px;
+  }
+  .hl-steps {
+    font-size: 13px;
+    color: var(--text-secondary);
+    padding-left: 20px;
+    margin-bottom: 12px;
+  }
+  .hl-steps li {
+    margin-bottom: 6px;
+  }
+  .hl-cmd {
+    display: block;
+    background: var(--bg-card-alt);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 9px 12px;
+    margin-top: 5px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    color: var(--text-primary);
+    overflow-x: auto;
+    white-space: nowrap;
+    user-select: all;
+  }
+  .hl-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+  }
+
   /* Responsive */
   @media (max-width: 720px) {
     .status-bar {
@@ -1072,7 +1126,7 @@
     <div class="brand-wrap">
       <div class="brand-icon">🔥</div>
       <div>
-        <h1>Kontrola grejanja v2.3 (OTA)</h1>
+        <h1>Kontrola grejanja v2.4 (OTA)</h1>
         <div class="header-meta">
           <span class="current-time" id="currentTime">Učitavanje vremena...</span>
           <span class="conn-badge" id="connBadge">
@@ -1195,6 +1249,41 @@
       <div class="timeline-bar" id="timelineBar"></div>
       <div class="timeline-hours">
         <span>00h</span><span>04h</span><span>08h</span><span>12h</span><span>16h</span><span>20h</span><span>24h</span>
+      </div>
+    </div>
+
+    <!-- Pelet u kotlu -->
+    <div class="timeline-card" id="pelletCard">
+      <div class="section-title">
+        <span>🪵 Pelet u kotlu</span>
+        <span style="font-size:12px;color:var(--text-secondary)" id="pelLast"></span>
+      </div>
+      <div class="heatlog-stats">
+        <div class="heatlog-stat"><div class="hl-label">Danas</div><div class="hl-value" id="pelToday">--</div></div>
+        <div class="heatlog-stat"><div class="hl-label">Količina danas</div><div class="hl-value" id="pelKg">--</div></div>
+      </div>
+      <div class="hl-actions" style="margin-top:0">
+        <button class="modal-btn" type="button" onclick="addPellet()">➕ Dodaj džak (15 kg)</button>
+        <button class="modal-btn" type="button" onclick="undoPellet()">↩ Poništi poslednji</button>
+        <a class="modal-btn" href="http://192.168.1.24:3600" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center">📊 Praćenje peleta i grejanja</a>
+      </div>
+    </div>
+
+    <!-- Rad grejanja (log) -->
+    <div class="timeline-card" id="heatLogCard">
+      <div class="section-title">
+        <span>🔥 Rad grejanja</span>
+        <span style="font-size:12px;color:var(--text-secondary)" id="hlRunning"></span>
+      </div>
+      <div class="heatlog-stats">
+        <div class="heatlog-stat">
+          <div class="hl-label">Danas</div>
+          <div class="hl-value" id="hlToday">--</div>
+        </div>
+        <div class="heatlog-stat">
+          <div class="hl-label">Ukupno</div>
+          <div class="hl-value" id="hlTotal">--</div>
+        </div>
       </div>
     </div>
   </div>
@@ -1384,6 +1473,30 @@
       </div>
     </div>
 
+    <!-- Log rada grejanja: preuzimanje -->
+    <div class="system-info" style="margin-bottom:18px">
+      <h3>📥 Log rada grejanja</h3>
+      <p style="font-size:13px;color:var(--text-secondary);margin-bottom:10px">
+        Kontroler za svaki dan beleži koliko je sati grejanje radilo. Podaci se čuvaju u fajlu <code>heating_days.csv</code>, jedan red po danu u obliku <code>datum,sekunde,h:mm</code> (npr. <code>2026-10-24,5400,1:30</code>).
+      </p>
+      <ol class="hl-steps">
+        <li>
+          <strong>Iz pregledača:</strong> klikni dugme <em>Preuzmi log</em> ispod. Fajl se otvara u Excelu ili LibreOffice Calcu.
+        </li>
+        <li>
+          <strong>Iz terminala:</strong>
+          <code class="hl-cmd" id="hlCurlCmd">curl -o grejanje.csv http://192.168.1.75/heating_days.csv</code>
+        </li>
+        <li>
+          <strong>Pre ažuriranja web stranice</strong> (LittleFS / „Upload Filesystem Image“) obavezno preuzmi log, jer to ažuriranje briše ceo fajl-sistem, pa i istoriju.
+        </li>
+      </ol>
+      <div class="hl-actions">
+        <a class="modal-btn" id="hlDownloadLink" href="/heating_days.csv" download="grejanje.csv" style="text-decoration:none;display:inline-flex;align-items:center">📥 Preuzmi log</a>
+        <button class="modal-btn" type="button" onclick="clearHeatLog()">🗑️ Obriši log</button>
+      </div>
+    </div>
+
     <!-- OTA Firmware / LittleFS Update Card -->
     <div class="ota-card">
       <h3>📦 Bežično OTA Ažuriranje (Web &amp; PlatformIO)</h3>
@@ -1462,11 +1575,15 @@
     }))
   };
 
-  async function apiRequest(endpoint, options = {}) {
+ async function apiRequest(endpoint, options = {}) {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 1800);
-      const response = await fetch(endpoint, { ...options, signal: controller.signal });
+      const timeout = setTimeout(() => controller.abort(), 6000);
+      const isGet = !options.method || options.method.toUpperCase() === 'GET';
+      const url = isGet
+        ? endpoint + (endpoint.includes('?') ? '&' : '?') + '_t=' + Date.now()
+        : endpoint;
+      const response = await fetch(url, { cache: 'no-store', ...options, signal: controller.signal });
       clearTimeout(timeout);
       if (!response.ok) throw new Error('HTTP ' + response.status);
       isDemoMode = false;
@@ -1476,11 +1593,14 @@
       }
       return await response.text();
     } catch (err) {
-      isDemoMode = true;
-      return handleDemoRequest(endpoint, options);
-    }
+  console.error('API greška na', endpoint, err);
+  if (endpoint.startsWith('/api/status')) {
+    isDemoMode = true;
+    window._lastApiError = err.message || 'Timeout';
   }
-
+  return handleDemoRequest(endpoint, options);
+}
+  }
   function handleDemoRequest(endpoint, options) {
     const now = new Date();
     demoState.currentDay = now.getDay();
@@ -1557,6 +1677,17 @@
         freeHeap: demoState.freeHeap
       };
     }
+    if (endpoint.startsWith('/api/pellet')) return { bagsToday: 2, kgToday: 30, last: '2026-10-25 08:10' };
+    if (endpoint.startsWith('/api/heating-log') && !endpoint.includes('clear')) {
+      return {
+        heatingOn: demoState.heatingOn,
+        currentRunSeconds: 1500,
+        todaySeconds: 5400,
+        todayTime: '1h 30m',
+        totalSeconds: 912000,
+        totalTime: '253h 20m'
+      };
+    }
     return 'OK';
   }
 
@@ -1612,7 +1743,9 @@
     }
 
     if (tabName === 'settings') {
-      setTimeout(scrollToActiveDay, 80);
+    loadSchedule(currentDay);
+    loadHysteresis();
+    setTimeout(scrollToActiveDay, 100);
     } else if (tabName === 'system') {
       loadSystemInfo();
       systemIntervalId = setInterval(loadSystemInfo, 5000);
@@ -1753,9 +1886,9 @@
         document.getElementById(p + '_sm').value = String(data[p].startMinute).padStart(2, '0');
         document.getElementById(p + '_eh').value = data[p].endHour;
         document.getElementById(p + '_em').value = String(data[p].endMinute).padStart(2, '0');
-        document.getElementById(p + '_temp').value = data[p].targetTemp;
+        document.getElementById(p + '_temp').value = Number(data[p].targetTemp).toFixed(1);
       });
-      document.getElementById('night_temp').value = data.nightTemp;
+      document.getElementById('night_temp').value = Number(data.nightTemp).toFixed(1);
       updatePeriodVisuals();
       renderTimeline(data);
     });
@@ -1885,6 +2018,8 @@
     `;
   }
 
+ let lastSettingsVer = 0;
+
   function updateStatus() {
     apiRequest('/api/status').then(d => {
       if (!d) return;
@@ -1917,7 +2052,7 @@
       if (connBadge && connText) {
         if (isDemoMode) {
           connBadge.className = 'conn-badge demo';
-          connText.textContent = 'Demo prikaz (Offline)';
+          connText.textContent = 'Offline: ' + (window._lastApiError || 'Demo');
         } else if (lastUpd > 600) {
           connBadge.className = 'conn-badge stale';
           connText.textContent = 'Senzor se ne javlja!';
@@ -1938,13 +2073,40 @@
         manualTempDisplay.textContent = d.manualTargetTemp.toFixed(1) + '°C';
       }
 
-      const forceOff = d.manualForceOff || (d.manualMode && !d.heatingOn && d.currentTemp < (d.manualTargetTemp - (d.hysteresisOn || 2)));
+      // Koristi tačan manualForceOff ako ga kontroler šalje, inače fallback računicu
+      const forceOff = (d.manualForceOff !== undefined)
+        ? Boolean(d.manualForceOff)
+        : (d.manualMode && !d.heatingOn && d.currentTemp < (d.manualTargetTemp - (d.hysteresisOn || 2)));
       updateModeButtonsUI(d.manualMode, forceOff);
 
-      const shownTarget = d.manualMode ? (forceOff ? 'OFF' : d.manualTargetTemp.toFixed(1) + '°C') : (d.targetTemp !== undefined ? d.targetTemp.toFixed(1) + '°C' : 'Po rasporedu');
+      const shownTarget = d.manualMode
+        ? (forceOff ? 'OFF' : d.manualTargetTemp.toFixed(1) + '°C')
+        : (d.targetTemp !== undefined ? d.targetTemp.toFixed(1) + '°C' : 'Po rasporedu');
       document.getElementById('targetTempSub').textContent = 'Cilj: ' + shownTarget;
       document.getElementById('dialTargetBadge').textContent = d.manualMode ? `Ručno: ${shownTarget}` : `Auto cilj: ${shownTarget}`;
 
+      // Sinhronizacija histerezisa direktno iz /api/status (ako korisnik trenutno ne kuca u ta polja)
+      const activeEl = document.activeElement;
+const editingSettings = activeEl && activeEl.tagName === 'INPUT' && activeEl.closest && activeEl.closest('#tab-settings');
+      if (!editingSettings && d.hysteresisOn !== undefined && d.hysteresisOff !== undefined) {
+        const hOn = document.getElementById('hyst_on');
+        const hOff = document.getElementById('hyst_off');
+        if (hOn && hOff) {
+          hOn.value = d.hysteresisOn.toFixed(1);
+          hOff.value = d.hysteresisOff.toFixed(1);
+          updateHystPreview();
+        }
+      }
+
+      // Live sinhronizacija rasporeda kada se promeni settingsVer na drugom uređaju
+      if (d.settingsVer !== undefined) {
+        if (lastSettingsVer !== 0 && d.settingsVer !== lastSettingsVer && !editingSettings) {
+          loadSchedule(currentDay);
+        }
+        lastSettingsVer = d.settingsVer;
+      }
+
+      // Prikaz baterije / direktnog napajanja
       const pillEl = document.getElementById('sensorBatteryPill');
       const warning = document.getElementById('batteryWarning');
       if (d.batteryVoltage && d.batteryVoltage > 0.5) {
@@ -1974,7 +2136,6 @@
       }
     });
   }
-
   function loadSystemInfo() {
     apiRequest('/api/system').then(d => {
       if (!d) return;
@@ -1983,6 +2144,63 @@
       document.getElementById('sys-rssi').textContent = (d.rssi !== undefined ? d.rssi + ' dBm' : '--');
       document.getElementById('sys-uptime').textContent = d.uptime || '--';
       document.getElementById('sys-heap').textContent = d.freeHeap ? (d.freeHeap / 1024).toFixed(1) + ' KB' : '--';
+    });
+  }
+
+  function fmtDur(sec) {
+    sec = Math.max(0, Math.floor(sec || 0));
+    return Math.floor(sec / 3600) + 'h ' + Math.floor((sec % 3600) / 60) + 'm';
+  }
+
+  function loadHeatLog() {
+    apiRequest('/api/heating-log').then(d => {
+      if (!d || typeof d !== 'object') return;
+      document.getElementById('hlToday').textContent = fmtDur(d.todaySeconds);
+      document.getElementById('hlTotal').textContent = fmtDur(d.totalSeconds);
+      document.getElementById('hlRunning').textContent =
+        d.heatingOn ? 'Radi već ' + fmtDur(d.currentRunSeconds) : 'Ugašeno';
+    });
+  }
+
+  function clearHeatLog() {
+    openConfirmModal(
+      'Brisanje loga',
+      'Obrisaće se istorija rada grejanja i ukupni brojač. Nastaviti?',
+      () => {
+        apiRequest('/api/heating-log/clear', { method: 'POST' }).then(() => {
+          showToast('Log rada grejanja obrisan');
+          loadHeatLog();
+        });
+      }
+    );
+  }
+
+  function loadPellet() {
+    apiRequest('/api/pellet').then(d => {
+      if (!d || typeof d !== 'object') return;
+      document.getElementById('pelToday').textContent = (d.bagsToday || 0) + (d.bagsToday === 1 ? ' džak' : ' džaka');
+      document.getElementById('pelKg').textContent = (d.kgToday || 0) + ' kg';
+      const l = d.last || '';
+      document.getElementById('pelLast').textContent = l ? 'Poslednji: ' + l.slice(8, 10) + '.' + l.slice(5, 7) + '. ' + l.slice(11) : '';
+    });
+  }
+
+  function addPellet() {
+    openConfirmModal('Dodaj pelet', 'Upisati 1 džak (15 kg) peleta ubačen u kotao?', () => {
+      apiRequest('/api/pellet/add', { method: 'POST' }).then(d => {
+        if (d && d.error) { showToast(d.error); return; }
+        showToast('Džak upisan');
+        loadPellet();
+      });
+    });
+  }
+
+  function undoPellet() {
+    openConfirmModal('Poništi poslednji', 'Obrisati poslednji upisani džak?', () => {
+      apiRequest('/api/pellet/undo', { method: 'POST' }).then(() => {
+        showToast('Poništeno');
+        loadPellet();
+      });
     });
   }
 
@@ -2071,17 +2289,36 @@
     };
     xhr.send(formData);
   }
-
-  (function init() {
+(function init() {
     try {
       const savedTheme = localStorage.getItem('thermostat_theme');
       if (savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
     } catch (e) {}
-    setCurrentDay();
-    loadHysteresis();
+
     updateStatus();
+    setTimeout(setCurrentDay, 400);
+    setTimeout(loadHeatLog, 900);
+    setTimeout(loadPellet, 1400);
+
     setInterval(updateStatus, 3000);
+    setInterval(loadHeatLog, 30000);
+    setInterval(loadPellet, 30000);
+
+    const host = (location.protocol === 'http:' && location.host) ? location.host : '192.168.1.75';
+    document.getElementById('hlCurlCmd').textContent = 'curl -o grejanje.csv http://' + host + '/heating_days.csv';
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        updateStatus();
+        setTimeout(loadHeatLog, 300);
+        setTimeout(loadPellet, 600);
+        if (document.getElementById('tab-settings').classList.contains('active')) {
+          setTimeout(() => loadSchedule(currentDay), 900);
+        }
+      }
+    });
   })();
+
 </script>
 </body>
 </html>

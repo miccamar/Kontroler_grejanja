@@ -15,12 +15,19 @@
 #include <time.h>
 #include <LittleFS.h>
 #include <WiFiManager.h>
+#include <ESP8266mDNS.h>
 
 const char* ntpServer = "pool.ntp.org";
 const char* tzInfo = "CET-1CEST,M3.5.0,M10.5.0/3";
 
-const char* weatherApiKey = "Tvoj_OpenWeather_API_Ključ";
-const char* weatherCity = "Tvoja_lokacija";
+const char* weatherApiKey = "0264932647e5f8e42578ada779712859";
+const char* weatherCity = "Kraljevo,RS";
+
+// --- Statička IP adresa (promeni po potrebi; izaberi adresu van DHCP opsega rutera) ---
+const bool USE_STATIC_IP = true;
+IPAddress staticIP(192, 168, 1, 75);  // mora da se poklapa sa controllerIP u kodu termometra
+IPAddress staticGW(192, 168, 1, 1);
+IPAddress staticSN(255, 255, 255, 0);
 
 #define RELAY_PIN 5          // D1 (GPIO5) - Aktivno na LOW
 #define MANUAL_BUTTON 12     // D6 (GPIO12)
@@ -35,6 +42,25 @@ ESP8266HTTPUpdateServer httpUpdater;
 WiFiManager wifiManager;
 
 unsigned long bootTime = 0;
+
+// --- Log rada grejanja (LittleFS) ---
+const char* HEAT_LOG_FILE = "/heating_days.csv";   // format reda: datum,sekunde,h:mm (jedan red po danu)
+const char* HEAT_TOTAL_FILE = "/heating_total.txt"; // ukupno sekundi rada od poslednjeg brisanja
+const size_t HEAT_LOG_MAX_BYTES = 12000;            // kad pređe, odseca se starija polovina
+const char* PELLET_FILE = "/pellet_loads.csv";      // red: epoch,YYYY-MM-DD HH:MM,džakova
+const int PELLET_BAG_KG = 15;
+const char* OUTDOOR_FILE = "/outdoor_days.csv";     // red: datum,broj_merenja,zbir,min,max
+String odDate = "";
+unsigned int odCount = 0;
+float odSum = 0, odMin = 0, odMax = 0;
+unsigned long odLastWrite = 0;
+bool heatTrackState = false;
+unsigned long heatStartMs = 0;
+time_t heatStartEpoch = 0;
+unsigned long heatTotalSeconds = 0;
+
+// Brojač verzije podešavanja za sinhronizaciju više uređaja
+uint32_t settingsVersion = 1;
 
 float currentTemp = 0.0;
 bool sensorValid = false;
@@ -103,6 +129,15 @@ void printCurrentTime();
 int calculateBatteryPercent(float voltage);
 String getUptime();
 
+void trackHeating();
+void loadHeatTotal();
+void handleHeatingLog();
+void handleHeatingLogClear();
+void recordOutdoor(float t);
+void handlePelletInfo();
+void handlePelletAdd();
+void handlePelletUndo();
+
 void handleTempUpdate();
 void handleStatus();
 void handleManual();
@@ -139,6 +174,7 @@ void setup() {
 
   EEPROM.begin(EEPROM_SIZE);
   loadSettings();
+  loadHeatTotal();
   updateLEDs();
 
   setupWiFiManager();
@@ -179,6 +215,11 @@ void setup() {
   server.on("/api/schedule", HTTP_POST, handleSetSchedule);
   server.on("/api/time", HTTP_GET, handleGetTime);
   server.on("/api/hysteresis", HTTP_POST, handleSetHysteresis);
+  server.on("/api/pellet", HTTP_GET, handlePelletInfo);
+  server.on("/api/pellet/add", HTTP_POST, handlePelletAdd);
+  server.on("/api/pellet/undo", HTTP_POST, handlePelletUndo);
+  server.on("/api/heating-log", HTTP_GET, handleHeatingLog);
+  server.on("/api/heating-log/clear", HTTP_POST, handleHeatingLogClear);
   server.on("/api/system", HTTP_GET, handleSystemInfo);
   server.on("/api/reset-wifi", HTTP_POST, handleResetWiFi);
   server.on("/api/restart", HTTP_POST, handleRestart);
@@ -202,6 +243,7 @@ void setup() {
 
   server.begin();
   Serial.println("🌐 Web server pokrenut: http://" + WiFi.localIP().toString());
+  Serial.println("🔗 Ili preko imena: http://kontroler-grejanja.local");
   Serial.println("📦 Web OTA dostupan na: http://" + WiFi.localIP().toString() + "/firmware");
 
   updateOutdoorTemperature();
@@ -227,6 +269,9 @@ void setupOTA() {
     Serial.printf("❌ ArduinoOTA greška [%u]\n", error);
   });
   ArduinoOTA.begin();
+
+  // ArduinoOTA već pokreće mDNS sa ovim hostname-om -> http://kontroler-grejanja.local
+  MDNS.addService("http", "tcp", 80);
 }
 
 void loop() {
@@ -261,12 +306,15 @@ void loop() {
     digitalWrite(LOW_BATTERY_LED, LOW);
   }
 
-  if (millis() - lastWeatherUpdate > 600000UL) {
+  // Normalno na 10 min; dok nema podatka, pokušavaj na svaki minut
+  unsigned long weatherInterval = (outdoorTemp > -99.0) ? 600000UL : 60000UL;
+  if (millis() - lastWeatherUpdate > weatherInterval) {
     updateOutdoorTemperature();
     lastWeatherUpdate = millis();
   }
 
   controlHeating();
+  trackHeating();
   delay(10);
 }
 
@@ -405,6 +453,7 @@ void toggleHeating() {
     heatingOn = false;
   }
   saveSettings();
+  settingsVersion++; // Obavesti sve telefone da su podešavanja promenjena
 }
 
 void switchToAutoMode() {
@@ -412,6 +461,7 @@ void switchToAutoMode() {
   manualForceOff = false;
   updateLEDs();
   saveSettings();
+  settingsVersion++; // Obavesti sve telefone da su podešavanja promenjena
 }
 
 void updateLEDs() {
@@ -428,7 +478,8 @@ void handleStatus() {
   doc["outdoorTemp"] = outdoorTemp;
   doc["heatingOn"] = heatingOn;
   doc["manualMode"] = manualMode;
-  doc["manualForceOff"] = manualForceOff;
+  doc["manualForceOff"] = manualForceOff; // <-- OBAVEZNO ZA SINHRONIZACIJU DUGMIĆA
+  doc["settingsVer"] = settingsVersion;   // <-- OBAVEZNO ZA SINHRONIZACIJU VIŠE TELEFONA
   doc["targetTemp"] = activeTargetTemp;
   doc["lastUpdate"] = sensorValid ? ((millis() - lastTempUpdate) / 1000) : 9999;
   doc["currentDay"] = timeinfo->tm_wday;
@@ -443,6 +494,11 @@ void handleStatus() {
 
   String json;
   serializeJson(doc, json);
+
+  // Zabrana keširanja u mobilnim pregledačima:
+  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  server.sendHeader("Pragma", "no-cache");
+  server.sendHeader("Expires", "-1");
   server.send(200, "application/json", json);
 }
 
@@ -471,6 +527,7 @@ void handleManual() {
   } else {
     server.send(400, "text/plain", "Missing mode");
   }
+  settingsVersion++; // Obavesti sve telefone da su podešavanja promenjena
 }
 
 void handleGetSchedule() {
@@ -512,9 +569,10 @@ void handleGetSchedule() {
 
   String json;
   serializeJson(doc, json);
+
+  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
   server.send(200, "application/json", json);
 }
-
 void handleSetSchedule() {
   if (!server.hasArg("plain")) {
     server.send(400, "text/plain", "Missing data");
@@ -539,6 +597,7 @@ void handleSetSchedule() {
   sched.nightTemp = doc["nightTemp"];
 
   saveSettings();
+  settingsVersion++; // Obavesti sve telefone da je raspored promenjen
   server.send(200, "text/plain", "Schedule updated");
 }
 
@@ -556,6 +615,7 @@ void handleSetHysteresis() {
   hysteresisOff = constrain((float)doc["off"], 0.0f, 3.0f);
   saveSettings();
   server.send(200, "text/plain", "Hysteresis updated");
+  settingsVersion++; // Obavesti sve telefone da su podešavanja promenjena
 }
 
 void updateOutdoorTemperature() {
@@ -563,23 +623,35 @@ void updateOutdoorTemperature() {
 
   WiFiClient client;
   HTTPClient http;
-  http.setTimeout(2500);
+  http.setTimeout(5000);
 
   String url = String("http://api.openweathermap.org/data/2.5/weather?q=") +
                weatherCity + "&appid=" + weatherApiKey + "&units=metric";
 
-  if (http.begin(client, url)) {
-    int httpCode = http.GET();
-    if (httpCode == HTTP_CODE_OK) {
-      StaticJsonDocument<768> doc;
-      if (!deserializeJson(doc, http.getString())) {
-        if (doc.containsKey("main") && doc["main"].containsKey("temp")) {
-          outdoorTemp = doc["main"]["temp"];
-        }
-      }
-    }
-    http.end();
+  if (!http.begin(client, url)) {
+    Serial.println("🌤️ Weather: http.begin nije uspeo");
+    return;
   }
+
+  int httpCode = http.GET();
+  if (httpCode == HTTP_CODE_OK) {
+    // Filter: čuvamo samo main.temp, ceo odgovor ne staje u 768 bajtova
+    StaticJsonDocument<48> filter;
+    filter["main"]["temp"] = true;
+
+    StaticJsonDocument<192> doc;
+    DeserializationError err = deserializeJson(doc, http.getString(), DeserializationOption::Filter(filter));
+    if (!err && doc["main"]["temp"].is<float>()) {
+      outdoorTemp = doc["main"]["temp"];
+      recordOutdoor(outdoorTemp);
+      Serial.printf("🌤️ Spoljna temperatura: %.1f C\n", outdoorTemp);
+    } else {
+      Serial.printf("🌤️ Weather JSON greška: %s\n", err.c_str());
+    }
+  } else {
+    Serial.printf("🌤️ Weather HTTP greška: %d (%s)\n", httpCode, http.errorToString(httpCode).c_str());
+  }
+  http.end();
 }
 
 void saveSettings() {
@@ -627,12 +699,352 @@ void setDefaultSchedule() {
   manualForceOff = false;
 }
 
+// ===================== LOG RADA GREJANJA =====================
+
+String fmtDuration(unsigned long s) {
+  return String(s / 3600) + "h " + String((s % 3600) / 60) + "m";
+}
+
+String fmtHM(unsigned long s) {
+  unsigned long m = (s % 3600) / 60;
+  return String(s / 3600) + ":" + (m < 10 ? "0" : "") + String(m);
+}
+
+String heatDayKey(time_t t) {
+  if (t <= 24 * 3600) return "nepoznato";  // vreme nije bilo sinhronizovano
+  char key[11];
+  strftime(key, sizeof(key), "%Y-%m-%d", localtime(&t));
+  return String(key);
+}
+
+void loadHeatTotal() {
+  File f = LittleFS.open(HEAT_TOTAL_FILE, "r");
+  if (f) {
+    heatTotalSeconds = f.readString().toInt();
+    f.close();
+  }
+}
+
+void saveHeatTotal() {
+  File f = LittleFS.open(HEAT_TOTAL_FILE, "w");
+  if (f) {
+    f.print(heatTotalSeconds);
+    f.close();
+  }
+}
+
+// Dodaje trajanje ciklusa u red tog dana (kreira novi red ako je novi dan).
+// Radi red po red preko privremenog fajla da ne troši RAM.
+void addHeatDaily(time_t t, unsigned long secs) {
+  String key = heatDayKey(t);
+
+  File in = LittleFS.open(HEAT_LOG_FILE, "r");
+  File out = LittleFS.open("/heating_days.tmp", "w");
+  if (!out) {
+    if (in) in.close();
+    return;
+  }
+
+  // Ako je log prevelik, preskoči stariju polovinu
+  if (in && in.size() > HEAT_LOG_MAX_BYTES) {
+    in.seek(in.size() / 2);
+    in.readStringUntil('\n');  // odbaci polovičan red
+  }
+
+  String prev = "";
+  while (in && in.available()) {
+    String line = in.readStringUntil('\n');
+    line.trim();
+    if (line.length() == 0) continue;
+    if (prev.length()) {
+      out.print(prev);
+      out.print('\n');
+    }
+    prev = line;
+  }
+  if (in) in.close();
+
+  unsigned long total = secs;
+  if (prev.startsWith(key + ",")) {
+    // isti dan: spoji sa postojećim redom
+    int c1 = prev.indexOf(',');
+    int c2 = prev.indexOf(',', c1 + 1);
+    String num = (c2 > 0) ? prev.substring(c1 + 1, c2) : prev.substring(c1 + 1);
+    total += (unsigned long)num.toInt();
+  } else if (prev.length()) {
+    out.print(prev);
+    out.print('\n');
+  }
+
+  out.print(key);
+  out.print(',');
+  out.print(total);
+  out.print(',');
+  out.print(fmtHM(total));
+  out.print('\n');
+  out.close();
+
+  LittleFS.remove(HEAT_LOG_FILE);
+  LittleFS.rename("/heating_days.tmp", HEAT_LOG_FILE);
+}
+
+// Poziva se u loop(): prati promenu heatingOn i upisuje završene cikluse
+void trackHeating() {
+  if (heatingOn == heatTrackState) return;
+  heatTrackState = heatingOn;
+
+  if (heatingOn) {
+    heatStartMs = millis();
+    time_t t = time(nullptr);
+    heatStartEpoch = (t > 24 * 3600) ? t : 0;  // 0 ako vreme još nije sinhronizovano
+  } else {
+    unsigned long secs = (millis() - heatStartMs) / 1000;
+    if (secs < 5) return;  // ignoriši ultra kratka paljenja
+    addHeatDaily(heatStartEpoch, secs);
+    heatTotalSeconds += secs;
+    saveHeatTotal();
+  }
+}
+
+void handleHeatingLog() {
+  unsigned long currentRun = heatingOn ? (millis() - heatStartMs) / 1000 : 0;
+
+  // Današnje vreme = današnji red iz fajla + ciklus koji je u toku
+  unsigned long todaySec = 0;
+  time_t nowT = time(nullptr);
+  if (nowT > 24 * 3600) {
+    String todayKey = heatDayKey(nowT);
+
+    String last = "";
+    File f = LittleFS.open(HEAT_LOG_FILE, "r");
+    while (f && f.available()) {
+      String line = f.readStringUntil('\n');
+      line.trim();
+      if (line.length()) last = line;
+    }
+    if (f) f.close();
+
+    if (last.startsWith(todayKey + ",")) {
+      int c1 = last.indexOf(',');
+      int c2 = last.indexOf(',', c1 + 1);
+      String num = (c2 > 0) ? last.substring(c1 + 1, c2) : last.substring(c1 + 1);
+      todaySec = (unsigned long)num.toInt();
+    }
+    if (heatingOn && heatStartEpoch > 0 && heatDayKey(heatStartEpoch) == todayKey) {
+      todaySec += currentRun;
+    }
+  }
+
+  StaticJsonDocument<256> doc;
+  doc["heatingOn"] = heatingOn;
+  doc["currentRunSeconds"] = currentRun;
+  doc["todaySeconds"] = todaySec;
+  doc["todayTime"] = fmtDuration(todaySec);
+  doc["totalSeconds"] = heatTotalSeconds + currentRun;
+  doc["totalTime"] = fmtDuration(heatTotalSeconds + currentRun);
+
+  String json;
+  serializeJson(doc, json);
+  server.send(200, "application/json", json);
+}
+
+void handleHeatingLogClear() {
+  LittleFS.remove(HEAT_LOG_FILE);
+  LittleFS.remove(HEAT_TOTAL_FILE);
+  LittleFS.remove("/heating_log.csv");  // stari format iz prethodne verzije, ako postoji
+  LittleFS.remove(OUTDOOR_FILE);
+  odDate = ""; odCount = 0; odLastWrite = 0;
+  heatTotalSeconds = 0;
+  if (heatingOn) {
+    heatStartMs = millis();
+    time_t t = time(nullptr);
+    heatStartEpoch = (t > 24 * 3600) ? t : 0;
+  }
+  server.send(200, "text/plain", "Log obrisan");
+}
+
+// ===================== PELET U KOTLU =====================
+
+// Prepisuje fajl red po red: opciono samo noviju polovinu ili bez poslednjeg reda
+void rewriteLines(const char* path, bool halfOnly, bool dropLast) {
+  File in = LittleFS.open(path, "r");
+  if (!in) return;
+  if (halfOnly) {
+    in.seek(in.size() / 2);
+    in.readStringUntil('\n');
+  }
+  File out = LittleFS.open("/rw.tmp", "w");
+  if (!out) { in.close(); return; }
+  String prev = "";
+  while (in.available()) {
+    String line = in.readStringUntil('\n');
+    line.trim();
+    if (!line.length()) continue;
+    if (prev.length()) { out.print(prev); out.print('\n'); }
+    prev = line;
+  }
+  if (prev.length() && !dropLast) { out.print(prev); out.print('\n'); }
+  in.close();
+  out.close();
+  LittleFS.remove(path);
+  LittleFS.rename("/rw.tmp", path);
+}
+
+void handlePelletInfo() {
+  unsigned long bagsToday = 0;
+  String last = "";
+  String todayKey = heatDayKey(time(nullptr));
+  File f = LittleFS.open(PELLET_FILE, "r");
+  while (f && f.available()) {
+    String line = f.readStringUntil('\n');
+    int c1 = line.indexOf(',');
+    int c2 = line.indexOf(',', c1 + 1);
+    if (c1 < 1 || c2 < 0) continue;
+    String dt = line.substring(c1 + 1, c2);
+    if (dt.startsWith(todayKey)) bagsToday += line.substring(c2 + 1).toInt();
+    last = dt;
+  }
+  if (f) f.close();
+
+  StaticJsonDocument<192> doc;
+  doc["bagsToday"] = bagsToday;
+  doc["kgToday"] = bagsToday * PELLET_BAG_KG;
+  doc["last"] = last;
+  String json;
+  serializeJson(doc, json);
+  server.send(200, "application/json", json);
+}
+
+void handlePelletAdd() {
+  time_t t = time(nullptr);
+  if (t <= 24 * 3600) {  // bez tačnog vremena ne upisujemo
+    server.send(200, "application/json", "{\"error\":\"Vreme nije sinhronizovano\"}");
+    return;
+  }
+  int bags = server.hasArg("bags") ? server.arg("bags").toInt() : 1;
+  if (bags < 1 || bags > 10) bags = 1;
+
+  char buf[17];
+  strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M", localtime(&t));
+  File f = LittleFS.open(PELLET_FILE, "a");
+  if (!f) {
+    server.send(200, "application/json", "{\"error\":\"Upis nije uspeo\"}");
+    return;
+  }
+  f.print((unsigned long)t);
+  f.print(',');
+  f.print(buf);
+  f.print(',');
+  f.println(bags);
+  size_t sz = f.size();
+  f.close();
+  if (sz > HEAT_LOG_MAX_BYTES) rewriteLines(PELLET_FILE, true, false);
+  handlePelletInfo();
+}
+
+void handlePelletUndo() {
+  rewriteLines(PELLET_FILE, false, true);
+  handlePelletInfo();
+}
+
+// ===================== SPOLJNA TEMPERATURA PO DANIMA =====================
+
+// Zamenjuje poslednji red fajla ako počinje ključem, inače dodaje novi (red po red, malo RAM-a)
+void upsertLastLine(const char* path, const String& key, const String& newLine, size_t maxBytes) {
+  File in = LittleFS.open(path, "r");
+  File out = LittleFS.open("/up.tmp", "w");
+  if (!out) { if (in) in.close(); return; }
+  if (in && in.size() > maxBytes) {
+    in.seek(in.size() / 2);
+    in.readStringUntil('\n');
+  }
+  String prev = "";
+  while (in && in.available()) {
+    String line = in.readStringUntil('\n');
+    line.trim();
+    if (!line.length()) continue;
+    if (prev.length()) { out.print(prev); out.print('\n'); }
+    prev = line;
+  }
+  if (in) in.close();
+  if (prev.length() && !prev.startsWith(key + ",")) { out.print(prev); out.print('\n'); }
+  out.print(newLine);
+  out.print('\n');
+  out.close();
+  LittleFS.remove(path);
+  LittleFS.rename("/up.tmp", path);
+}
+
+void flushOutdoor() {
+  if (odDate.length() == 0 || odCount == 0) return;
+  String line = odDate + "," + String(odCount) + "," + String(odSum, 2) + "," + String(odMin, 1) + "," + String(odMax, 1);
+  upsertLastLine(OUTDOOR_FILE, odDate, line, 16000);
+}
+
+// Poziva se posle svakog uspešnog očitavanja spoljne temperature
+void recordOutdoor(float t) {
+  String key = heatDayKey(time(nullptr));
+  if (key == "nepoznato") return;
+
+  if (key != odDate) {
+    flushOutdoor();  // upiši prethodni dan do kraja
+    odDate = key; odCount = 0; odSum = 0; odMin = t; odMax = t;
+    // nastavi današnji red ako je kontroler restartovan tokom dana
+    String last = "";
+    File f = LittleFS.open(OUTDOOR_FILE, "r");
+    while (f && f.available()) {
+      String l = f.readStringUntil('\n');
+      l.trim();
+      if (l.length()) last = l;
+    }
+    if (f) f.close();
+    if (last.startsWith(key + ",")) {
+      int c1 = last.indexOf(','), c2 = last.indexOf(',', c1 + 1);
+      int c3 = last.indexOf(',', c2 + 1), c4 = last.indexOf(',', c3 + 1);
+      if (c4 > 0) {
+        odCount = last.substring(c1 + 1, c2).toInt();
+        odSum = last.substring(c2 + 1, c3).toFloat();
+        odMin = last.substring(c3 + 1, c4).toFloat();
+        odMax = last.substring(c4 + 1).toFloat();
+      }
+    }
+  }
+
+  odCount++;
+  odSum += t;
+  if (t < odMin) odMin = t;
+  if (t > odMax) odMax = t;
+
+  // Upis na svakih 30 min (štedi fleš), a prvo merenje dana odmah
+  if (odCount == 1 || odLastWrite == 0 || millis() - odLastWrite >= 1800000UL) {
+    odLastWrite = millis();
+    flushOutdoor();
+  }
+}
+
 void setupWiFiManager() {
   wifiManager.setConfigPortalTimeout(180);
+  wifiManager.setConnectTimeout(20);
+
+  if (USE_STATIC_IP) {
+    wifiManager.setSTAStaticIPConfig(staticIP, staticGW, staticSN);
+  }
+
+  wifiManager.setAPCallback([](WiFiManager*) {
+    Serial.println("📶 Config portal: poveži se na WiFi 'Termostat-Setup' pa otvori http://192.168.4.1");
+  });
+
   if (!wifiManager.autoConnect("Termostat-Setup", "12345678")) {
     delay(3000);
     ESP.restart();
   }
+
+  // Zaštita: sa statičkom IP adresom DNS ume da ostane prazan (NTP i vreme bi tada pali)
+  if (USE_STATIC_IP && WiFi.dnsIP() == IPAddress(0, 0, 0, 0)) {
+    WiFi.config(staticIP, staticGW, staticSN, staticGW);
+  }
+
+  Serial.println("✅ WiFi povezan, IP: " + WiFi.localIP().toString());
 }
 
 void checkWiFiReset() {
