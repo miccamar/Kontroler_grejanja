@@ -124,6 +124,8 @@ void updateOutdoorTemperature();
 void controlHeating();
 void saveSettings();
 void loadSettings();
+void saveHeatTotal();
+String fmtDuration(unsigned long s);
 void setDefaultSchedule();
 String getDayName(int day);
 void printCurrentTime();
@@ -221,6 +223,20 @@ void setup() {
   server.on("/api/pellet/undo", HTTP_POST, handlePelletUndo);
   server.on("/api/heating-log", HTTP_GET, handleHeatingLog);
   server.on("/api/heating-log/clear", HTTP_POST, handleHeatingLogClear);
+  server.on("/api/heating-log/set-total", HTTP_GET, []() {
+    if (server.hasArg("sec")) {
+      heatTotalSeconds = (unsigned long)server.arg("sec").toInt();
+    } else if (server.hasArg("h") || server.hasArg("m")) {
+      unsigned long h = server.hasArg("h") ? (unsigned long)server.arg("h").toInt() : 0;
+      unsigned long m = server.hasArg("m") ? (unsigned long)server.arg("m").toInt() : 0;
+      heatTotalSeconds = h * 3600UL + m * 60UL;
+    } else {
+      server.send(400, "text/plain", "Koristi ?h=SATI&m=MINUTI ili ?sec=SEKUNDE");
+      return;
+    }
+    saveHeatTotal();
+    server.send(200, "text/plain", "Ukupno vreme postavljeno na: " + fmtDuration(heatTotalSeconds));
+  });
   server.on("/api/system", HTTP_GET, handleSystemInfo);
   server.on("/api/reset-wifi", HTTP_POST, handleResetWiFi);
   server.on("/api/restart", HTTP_POST, handleRestart);
