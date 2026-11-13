@@ -1,5 +1,5 @@
 /*
- * KONTROLER GREJANJA v2.3 SA OTA PODRŠKOM (PlatformIO + LittleFS)
+ * KONTROLER GREJANJA v2.4 SA OTA PODRŠKOM (PlatformIO + LittleFS)
  * ESP8266 + Relej + LittleFS Web Server + ArduinoOTA + Web OTA (/firmware)
  */
 
@@ -28,6 +28,7 @@ const bool USE_STATIC_IP = true;
 IPAddress staticIP(192, 168, 1, 75);  // mora da se poklapa sa controllerIP u kodu termometra
 IPAddress staticGW(192, 168, 1, 1);
 IPAddress staticSN(255, 255, 255, 0);
+IPAddress staticDNS(8,8,8,8);
 
 #define RELAY_PIN 5          // D1 (GPIO5) - Aktivno na LOW
 #define MANUAL_BUTTON 12     // D6 (GPIO12)
@@ -73,7 +74,7 @@ float manualTargetTemp = 26.0;
 float activeTargetTemp = 17.0;
 unsigned long lastTempUpdate = 0;
 unsigned long lastWeatherUpdate = 0;
-
+String lastWeatherStatus = "Nije još pokrenuto";
 bool lowBattery = false;
 float batteryVoltage = 0.0;
 int batteryPercent = 0;
@@ -223,6 +224,13 @@ void setup() {
   server.on("/api/system", HTTP_GET, handleSystemInfo);
   server.on("/api/reset-wifi", HTTP_POST, handleResetWiFi);
   server.on("/api/restart", HTTP_POST, handleRestart);
+  server.on("/api/weather-debug", HTTP_GET, []() {
+    updateOutdoorTemperature();
+    String out = "Status: " + lastWeatherStatus +
+                 "\noutdoorTemp: " + String(outdoorTemp, 1) +
+                 "\nDNS: " + WiFi.dnsIP().toString();
+    server.send(200, "text/plain", out);
+  });
 
   server.onNotFound([]() {
     String path = server.uri();
@@ -618,42 +626,47 @@ void handleSetHysteresis() {
   settingsVersion++; // Obavesti sve telefone da su podešavanja promenjena
 }
 
+
 void updateOutdoorTemperature() {
-  if (WiFi.status() != WL_CONNECTED) return;
+  if (WiFi.status() != WL_CONNECTED) {
+    lastWeatherStatus = "WiFi nije povezan";
+    return;
+  }
 
   WiFiClient client;
   HTTPClient http;
+  http.useHTTP10(true);
   http.setTimeout(5000);
-
-  String url = String("http://api.openweathermap.org/data/2.5/weather?q=") +
-               weatherCity + "&appid=" + weatherApiKey + "&units=metric";
+String url = String("http://api.openweathermap.org/data/2.5/weather?lat=43.7232&lon=20.7056&appid=") + weatherApiKey + "&units=metric";
 
   if (!http.begin(client, url)) {
+    lastWeatherStatus = "http.begin nije uspeo";
     Serial.println("🌤️ Weather: http.begin nije uspeo");
     return;
   }
 
   int httpCode = http.GET();
   if (httpCode == HTTP_CODE_OK) {
-    // Filter: čuvamo samo main.temp, ceo odgovor ne staje u 768 bajtova
     StaticJsonDocument<48> filter;
     filter["main"]["temp"] = true;
 
     StaticJsonDocument<192> doc;
-    DeserializationError err = deserializeJson(doc, http.getString(), DeserializationOption::Filter(filter));
-    if (!err && doc["main"]["temp"].is<float>()) {
-      outdoorTemp = doc["main"]["temp"];
+    DeserializationError err = deserializeJson(doc, http.getStream(), DeserializationOption::Filter(filter));
+    if (!err && !doc["main"]["temp"].isNull()) {
+      outdoorTemp = doc["main"]["temp"].as<float>();
       recordOutdoor(outdoorTemp);
+      lastWeatherStatus = "OK (" + String(outdoorTemp, 1) + " C)";
       Serial.printf("🌤️ Spoljna temperatura: %.1f C\n", outdoorTemp);
     } else {
+      lastWeatherStatus = "JSON greška: " + String(err.c_str());
       Serial.printf("🌤️ Weather JSON greška: %s\n", err.c_str());
     }
   } else {
+    lastWeatherStatus = "HTTP greška: " + String(httpCode) + " (" + http.errorToString(httpCode) + ")";
     Serial.printf("🌤️ Weather HTTP greška: %d (%s)\n", httpCode, http.errorToString(httpCode).c_str());
   }
   http.end();
 }
-
 void saveSettings() {
   EEPROMData data;
   data.magic = EEPROM_MAGIC;
@@ -1041,7 +1054,7 @@ void setupWiFiManager() {
 
   // Zaštita: sa statičkom IP adresom DNS ume da ostane prazan (NTP i vreme bi tada pali)
   if (USE_STATIC_IP && WiFi.dnsIP() == IPAddress(0, 0, 0, 0)) {
-    WiFi.config(staticIP, staticGW, staticSN, staticGW);
+    WiFi.config(staticIP, staticGW, staticSN, staticGW, staticDNS);
   }
 
   Serial.println("✅ WiFi povezan, IP: " + WiFi.localIP().toString());
