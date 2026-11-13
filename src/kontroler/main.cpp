@@ -16,12 +16,11 @@
 #include <LittleFS.h>
 #include <WiFiManager.h>
 #include <ESP8266mDNS.h>
+#include "secrets.h"
 
 const char* ntpServer = "pool.ntp.org";
 const char* tzInfo = "CET-1CEST,M3.5.0,M10.5.0/3";
 
-const char* weatherApiKey = "0264932647e5f8e42578ada779712859";
-const char* weatherCity = "Kraljevo,RS";
 
 // --- Statička IP adresa (promeni po potrebi; izaberi adresu van DHCP opsega rutera) ---
 const bool USE_STATIC_IP = true;
@@ -152,6 +151,8 @@ void handleSystemInfo();
 void handleResetWiFi();
 void handleRestart();
 
+bool checkAuth();
+
 void setup() {
   Serial.begin(115200);
   delay(100);
@@ -224,6 +225,7 @@ void setup() {
   server.on("/api/heating-log", HTTP_GET, handleHeatingLog);
   server.on("/api/heating-log/clear", HTTP_POST, handleHeatingLogClear);
   server.on("/api/heating-log/set-total", HTTP_GET, []() {
+    if (!checkAuth()) return;
     if (server.hasArg("sec")) {
       heatTotalSeconds = (unsigned long)server.arg("sec").toInt();
     } else if (server.hasArg("h") || server.hasArg("m")) {
@@ -276,7 +278,7 @@ void setup() {
 
 void setupOTA() {
   // 1. Web OTA preko pregledača (/firmware)
-  httpUpdater.setup(&server, "/firmware");
+  httpUpdater.setup(&server, "/firmware", OTA_USER, OTA_PASS);
 
   // 2. ArduinoOTA za direktan upload iz PlatformIO
   ArduinoOTA.setHostname("kontroler-grejanja");
@@ -653,33 +655,31 @@ void updateOutdoorTemperature() {
   HTTPClient http;
   http.useHTTP10(true);
   http.setTimeout(5000);
-String url = String("http://api.openweathermap.org/data/2.5/weather?lat=43.7232&lon=20.7056&appid=") + weatherApiKey + "&units=metric";
+
+  String url = "http://api.open-meteo.com/v1/forecast?latitude=43.7258&longitude=20.6894&current=temperature_2m";
 
   if (!http.begin(client, url)) {
     lastWeatherStatus = "http.begin nije uspeo";
-    Serial.println("🌤️ Weather: http.begin nije uspeo");
     return;
   }
 
   int httpCode = http.GET();
   if (httpCode == HTTP_CODE_OK) {
     StaticJsonDocument<48> filter;
-    filter["main"]["temp"] = true;
+    filter["current"]["temperature_2m"] = true;
 
     StaticJsonDocument<192> doc;
     DeserializationError err = deserializeJson(doc, http.getStream(), DeserializationOption::Filter(filter));
-    if (!err && !doc["main"]["temp"].isNull()) {
-      outdoorTemp = doc["main"]["temp"].as<float>();
+    if (!err && !doc["current"]["temperature_2m"].isNull()) {
+      outdoorTemp = doc["current"]["temperature_2m"].as<float>();
       recordOutdoor(outdoorTemp);
       lastWeatherStatus = "OK (" + String(outdoorTemp, 1) + " C)";
-      Serial.printf("🌤️ Spoljna temperatura: %.1f C\n", outdoorTemp);
+      Serial.printf("🌤️ Spoljna temperatura (Open-Meteo): %.1f C\n", outdoorTemp);
     } else {
       lastWeatherStatus = "JSON greška: " + String(err.c_str());
-      Serial.printf("🌤️ Weather JSON greška: %s\n", err.c_str());
     }
   } else {
     lastWeatherStatus = "HTTP greška: " + String(httpCode) + " (" + http.errorToString(httpCode) + ")";
-    Serial.printf("🌤️ Weather HTTP greška: %d (%s)\n", httpCode, http.errorToString(httpCode).c_str());
   }
   http.end();
 }
@@ -878,6 +878,7 @@ void handleHeatingLog() {
 }
 
 void handleHeatingLogClear() {
+  if (!checkAuth()) return;
   LittleFS.remove(HEAT_LOG_FILE);
   LittleFS.remove(HEAT_TOTAL_FILE);
   LittleFS.remove("/heating_log.csv");  // stari format iz prethodne verzije, ako postoji
@@ -1128,7 +1129,16 @@ void handleSystemInfo() {
   server.send(200, "application/json", json);
 }
 
+bool checkAuth() {
+  if (!server.authenticate(OTA_USER, OTA_PASS)) {
+    server.requestAuthentication();
+    return false;
+  }
+  return true;
+}
+
 void handleResetWiFi() {
+  if (!checkAuth()) return;
   server.send(200, "text/plain", "WiFi reset - restartujem...");
   delay(500);
   wifiManager.resetSettings();
@@ -1136,6 +1146,7 @@ void handleResetWiFi() {
 }
 
 void handleRestart() {
+  if (!checkAuth()) return;
   server.send(200, "text/plain", "Restartovanje...");
   delay(500);
   ESP.restart();
