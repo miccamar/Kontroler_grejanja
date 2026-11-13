@@ -148,6 +148,10 @@ pio run -e kontroler -t uploadfs        # 2. Upis data/index.html u LittleFS mem
 
 # Za Bežični Termometar:
 pio run -e termometar -t upload         # Flešovanje firmvera termometra
+
+*U folderu include, secrets.h.example preimenujte u secrets.h i u njemu zamenite podatke za user i password*
+
+
 ```
 
 ### 2. Bežično ažuriranje (OTA) — nakon prvog USB flešovanja
