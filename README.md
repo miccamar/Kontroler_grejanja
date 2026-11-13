@@ -138,6 +138,7 @@ termostat_platformio/
 
 ### 1. Prvo flešovanje preko USB kabla
 
+
 Povežite željeni uređaj na računar USB kablom, otvorite folder u **VS Code** i pokrenite:
 
 ```bash
@@ -162,7 +163,11 @@ pio run -e kontroler_ota -t uploadfs    # Bežično ažuriranje web stranice
 pio run -e termometar_ota -t upload
 ```
 
-*(Napomena: Za bežično flešovanje preko PlatformIO proverite da li je u `platformio.ini` parametar `upload_port` postavljen na IP adresu ili mDNS ime vašeg uređaja).*
+*(Napomena: Za bežično flešovanje preko PlatformIO proverite da li je u `platformio.ini` parametar `upload_port` postavljen na IP adresu ili mDNS ime vašeg uređaja).
+Ukoliko pravite neke izmene preuzmite logove:
+Dnevni log rada grejanja   (http://192.168.1.75/heating_days.csv)
+Ukupno vreme rada u sekundama (http://192.168.1.75/heating_total.txt)
+Vraćanje ukupnog vremena  (http://192.168.1.75/api/heating-log/set-total?h=xx&m=xx), umesto xx upišite sate i minute.*
 
 ---
 
