@@ -158,7 +158,7 @@ void setup() {
 
   WiFi.setSleepMode(WIFI_NONE_SLEEP);
 
-  Serial.println("\n\n=== KONTROLER GREJANJA V2.3 (OTA + LittleFS) ===");
+  Serial.println("\n\n=== KONTROLER GREJANJA v2.4 (OTA + LittleFS) ===");
 
   if (!LittleFS.begin()) {
     Serial.println("❌ LittleFS mount failed!");
